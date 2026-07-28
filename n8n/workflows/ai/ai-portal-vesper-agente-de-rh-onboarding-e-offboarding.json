@@ -1,0 +1,533 @@
+{
+  "updatedAt": "2026-05-20T17:43:18.097Z",
+  "createdAt": "2026-05-20T16:34:42.077Z",
+  "name": "AI - PORTAL VESPER - Agente de RH Onboarding e Offboarding",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "4e926595-8d08-4db8-800e-ee1e241b6713",
+      "name": "Webhook Portal RH",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.body }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um assistente especializado em processos de RH (admissão, onboarding, troca de setor, desligamento, offboarding).\n\nAnalise a solicitação recebida e gere um plano estruturado com:\n- Checklist de tarefas (marque itens críticos que precisam aprovação humana)\n- Tarefas a serem criadas com responsáveis e prazos\n- Aprovações necessárias (NUNCA crie acessos, bloqueie usuários ou exclua contas automaticamente)\n- Observações importantes\n\nREGRAS CRÍTICAS:\n- Criação de acessos: sempre marcar como \"pendente aprovação\"\n- Bloqueio de usuário: sempre marcar como \"pendente aprovação\"\n- Exclusão de conta: sempre marcar como \"pendente aprovação\"\n- Dados pessoais sensíveis: nunca expor em logs ou notificações\n- Equipamentos: apenas solicitar, não alocar automaticamente\n- Documentos: verificar conformidade LGPD",
+          "maxIterations": 10
+        }
+      },
+      "id": "e48843c1-5e18-4f12-b812-ce25d9618ef9",
+      "name": "Agente de RH",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        464,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "18ddd9d7-c14b-4463-bf24-b7910b85cef7",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        480,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "tipo": "admissao",
+          "checklist": [
+            {
+              "item": "Criar conta de email",
+              "status": "pendente",
+              "critico": false
+            },
+            {
+              "item": "Solicitar equipamentos",
+              "status": "pendente",
+              "critico": false
+            },
+            {
+              "item": "Agendar treinamento",
+              "status": "pendente",
+              "critico": false
+            }
+          ],
+          "tarefas": [
+            {
+              "titulo": "Preparar documentação",
+              "responsavel": "RH",
+              "prazo": "2024-01-20"
+            }
+          ],
+          "aprovacoes": [
+            {
+              "tipo": "criacao_acesso",
+              "status": "pendente",
+              "justificativa": "Novo colaborador"
+            }
+          ],
+          "observacoes": "Processo iniciado com sucesso"
+        }
+      },
+      "id": "5e45934c-2f10-4637-bc49-a8432006cd23",
+      "name": "Parser Estruturado",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        432
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "erro",
+              "value": "Erro ao processar solicitação",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "dados_originais",
+              "value": "={{ $(\"Webhook Portal RH\").item.json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1d7cd313-b071-47e2-bb89-04dd61866d76",
+      "name": "Tratamento de Erro",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        240,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "tipo",
+              "value": "={{ $json.output.tipo }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "checklist",
+              "value": "={{ $json.output.checklist }}",
+              "type": "array"
+            },
+            {
+              "id": "3",
+              "name": "tarefas",
+              "value": "={{ $json.output.tarefas }}",
+              "type": "array"
+            },
+            {
+              "id": "4",
+              "name": "aprovacoes",
+              "value": "={{ $json.output.aprovacoes }}",
+              "type": "array"
+            },
+            {
+              "id": "5",
+              "name": "observacoes",
+              "value": "={{ $json.output.observacoes }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "colaborador",
+              "value": "={{ $(\"Webhook Portal RH\").item.json.body.colaborador }}",
+              "type": "object"
+            },
+            {
+              "id": "7",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2ab18986-62d1-46f5-a433-02e1b94658f7",
+      "name": "Normalizar Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        816,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.aprovacoes.length }}",
+              "rightValue": 0,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "bd6af369-6a41-4a8c-84a2-7071fcfa4bb9",
+      "name": "Verificar Aprovações Necessárias",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1040,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "47afdfb3-87db-4195-a704-a82cb4e7fac4",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1264,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"colaborador\": {{ $(\"Normalizar Dados\").item.json.colaborador }},\n  \"tarefas\": {{ $(\"Normalizar Dados\").item.json.tarefas }},\n  \"checklist\": {{ $(\"Normalizar Dados\").item.json.checklist }}\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "5d2e2fd1-54ca-4f2b-a023-7c5cf03590f6",
+      "name": "Criar Tarefas no Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1712,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"destinatario\": \"{{ $(\"Normalizar Dados\").item.json.colaborador.email }}\",\n  \"assunto\": \"Bem-vindo(a) - {{ $(\"Normalizar Dados\").item.json.tipo }}\",\n  \"mensagem\": \"Olá {{ $(\"Normalizar Dados\").item.json.colaborador.nome }}, seu processo de {{ $(\"Normalizar Dados\").item.json.tipo }} foi iniciado. Acompanhe as próximas etapas no portal.\"\n}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f7c2e9c0-cc22-4731-ba70-4fadfd5d9d2c",
+      "name": "Notificar Colaborador",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1936,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": true,\n  \"tipo\": \"{{ $(\"Normalizar Dados\").item.json.tipo }}\",\n  \"colaborador\": \"{{ $(\"Normalizar Dados\").item.json.colaborador.nome }}\",\n  \"tarefas_criadas\": {{ $(\"Normalizar Dados\").item.json.tarefas.length }},\n  \"aprovacoes_pendentes\": {{ $(\"Normalizar Dados\").item.json.aprovacoes.length }},\n  \"mensagem\": \"Processo iniciado com sucesso\"\n}",
+        "options": {
+          "responseCode": 200
+        }
+      },
+      "id": "61bea79f-9241-4f3f-b091-57b8d6a484d0",
+      "name": "Responder Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2160,
+        320
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={\n  \"success\": false,\n  \"erro\": \"{{ $(\"Tratamento de Erro\").item.json.erro }}\",\n  \"timestamp\": \"{{ $(\"Tratamento de Erro\").item.json.timestamp }}\",\n  \"mensagem\": \"Erro ao processar solicitação. Equipe de RH foi notificada.\"\n}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "68ac2984-7cf2-4ef9-be9d-e62db3ea1170",
+      "name": "Responder Webhook Erro",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        688,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🏢 PORTAL VESPER - Agente de RH\n\n**Funcionalidades:**\n- Admissão e Onboarding\n- Troca de Setor\n- Desligamento e Offboarding\n- Gestão de Documentos\n- Controle de Equipamentos\n- Agendamento de Treinamentos\n\n**Segurança:**\n- Aprovação humana para ações críticas\n- Auditoria completa\n- Proteção de dados sensíveis",
+        "height": 200,
+        "width": 600,
+        "color": 2
+      },
+      "id": "b5150e1b-8cf9-45d1-b5f2-fda527df8589",
+      "name": "Sticky Note 9c30cb47",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        272,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ✅ Aprovação Humana\n\nAções críticas que requerem aprovação:\n- Criação de acessos\n- Bloqueio de usuários\n- Exclusão de contas\n- Alocação de equipamentos\n\n⚠️ Nunca executar automaticamente",
+        "height": 400,
+        "width": 600,
+        "color": 4
+      },
+      "id": "b6b49e6f-d9ca-4c77-b65f-a14f438efdd3",
+      "name": "Sticky Note 1b2fddf3",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🚨 Tratamento de Erro\n\nCaptura e notifica erros:\n- Registra detalhes do erro\n- Notifica equipe de RH\n- Responde webhook com status 500",
+        "height": 200,
+        "width": 600
+      },
+      "id": "fc62f761-c5b8-4f88-ad01-68c6ee7e1716",
+      "name": "Sticky Note dda06a72",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        560
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "2b02d7a1-e6a5-4cc9-bf45-a1809bacb532",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Portal RH": {
+      "main": [
+        [
+          {
+            "node": "Agente de RH",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de RH": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de RH",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Estruturado": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de RH",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Tratamento de Erro": {
+      "main": [
+        []
+      ]
+    },
+    "Normalizar Dados": {
+      "main": [
+        [
+          {
+            "node": "Verificar Aprovações Necessárias",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Aprovações Necessárias": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Criar Tarefas no Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Tarefas no Portal": {
+      "main": [
+        [
+          {
+            "node": "Notificar Colaborador",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notificar Colaborador": {
+      "main": [
+        [
+          {
+            "node": "Responder Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Agente de RH",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "5ee89805-5da2-4ea7-9362-ca73095c17d6",
+  "tags": []
+}

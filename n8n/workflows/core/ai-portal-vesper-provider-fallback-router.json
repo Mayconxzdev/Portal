@@ -1,0 +1,271 @@
+{
+  "name": "AI - PORTAL VESPER - Provider Fallback Router",
+  "settings": {
+    "executionTimeout": 60
+  },
+  "nodes": [
+    {
+      "id": "n01",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n02",
+      "name": "Prepare Prompts",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nreturn [{\n  json: {\n    system_prompt: d.system_prompt || \"Você é o Supervisor do Portal Vesper.\",\n    prompt: d.prompt || d.message || \"\",\n    correlation_id: d.correlation_id || \"gw_\" + Math.random().toString(36).substr(2, 9),\n    request_id: d.request_id || \"req_\" + Math.random().toString(36).substr(2, 9),\n    preferred_provider: d.preferred_provider || \"openai\",\n    risk_level: d.risk_level || \"low\"\n  }\n}];"
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Call OpenAI Chain",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.4,
+      "position": [
+        550,
+        150
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.system_prompt }}"
+        }
+      }
+    },
+    {
+      "id": "n04",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        500,
+        350
+      ],
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-4o-mini"
+        },
+        "options": {
+          "temperature": 0.1
+        }
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Check OpenAI Success",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        150
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst original = $('Prepare Prompts').first().json;\nif (items.length > 0 && items[0].json.text && !items[0].json.error) {\n  return [{\n    json: {\n      success: true,\n      provider_used: \"openai\",\n      model_used: \"gpt-4o-mini\",\n      fallback_used: false,\n      text: items[0].json.text,\n      correlation_id: original.correlation_id,\n      request_id: original.request_id\n    }\n  }];\n}\n// Pass error for next step\nreturn [{\n  json: {\n    success: false,\n    error: items.length > 0 ? items[0].json.error : \"No output from OpenAI\",\n    correlation_id: original.correlation_id,\n    request_id: original.request_id\n  }\n}];"
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Check Fallback Router",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1050,
+        300
+      ],
+      "parameters": {
+        "dataType": "boolean",
+        "value1": "={{ $json.success }}",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.success }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Call Ollama Local",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1250,
+        450
+      ],
+      "onError": "continueRegularOutput",
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:11434/api/generate",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={\n  \"model\": \"llama3\",\n  \"prompt\": \"System: {{ $('Prepare Prompts').first().json.system_prompt }}\\n\\nUser: {{ $('Prepare Prompts').first().json.prompt }}\",\n  \"stream\": false\n}",
+        "options": {
+          "timeout": 15000
+        }
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Process Ollama Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1480,
+        450
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const items = $input.all();\nconst original = $('Prepare Prompts').first().json;\nif (items.length > 0 && items[0].json.response) {\n  return [{\n    json: {\n      success: true,\n      provider_used: \"ollama\",\n      model_used: \"llama3\",\n      fallback_used: true,\n      text: items[0].json.response,\n      correlation_id: original.correlation_id,\n      request_id: original.request_id\n    }\n  }];\n}\nreturn [{\n  json: {\n    success: false,\n    provider_used: \"none\",\n    fallback_used: true,\n    text: \"\",\n    error: \"Ollama offline or failed\",\n    correlation_id: original.correlation_id,\n    request_id: original.request_id\n  }\n}];"
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1750,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{ json: $input.first().json }];"
+      }
+    }
+  ],
+  "connections": {
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Prepare Prompts",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Prepare Prompts": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI Chain",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call OpenAI Chain": {
+      "main": [
+        [
+          {
+            "node": "Check OpenAI Success",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "main": [
+        [
+          {
+            "node": "Call OpenAI Chain",
+            "type": "ai",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check OpenAI Success": {
+      "main": [
+        [
+          {
+            "node": "Check Fallback Router",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Fallback Router": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Call Ollama Local",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Call Ollama Local": {
+      "main": [
+        [
+          {
+            "node": "Process Ollama Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Ollama Output": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false
+}

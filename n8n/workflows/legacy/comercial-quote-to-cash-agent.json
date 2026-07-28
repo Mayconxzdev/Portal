@@ -1,0 +1,830 @@
+{
+  "updatedAt": "2026-05-20T11:03:32.176Z",
+  "createdAt": "2026-05-19T18:30:29.808Z",
+  "name": "COMERCIAL - Quote to Cash Agent",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "t01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "t02",
+      "name": "Webhook Comercial",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "path": "vesper/comercial/quote-to-cash",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "t03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "t04",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n01",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst d = raw.body || raw.query || raw;\nd.runtime_mode = d.runtime_mode || \"MOCK\";\nd.correlation_id = d.correlation_id || (\"COML-\" + Date.now());\nd.request_id = d.request_id || (\"REQ-\" + Math.random().toString(36).substr(2,8).toUpperCase());\nd.user = d.user || {id:\"system\",name:\"Auto\",role:\"agent\",department:\"comercial\"};\nd.payload = d.payload || {};\nd.metadata = d.metadata || {};\nconst pl = d.payload;\nconst msg = (d.message||\"\").toLowerCase();\nif(!d.action){\n  if(pl.body||pl.from||pl.subject) d.action=\"email_intake\";\n  else if(pl.proposal_id && pl.approved===true) d.action=\"generate_pdf\";\n  else if(/proposta|or.amento|cliente/.test(msg)) d.action=\"intake\";\n  else d.action=\"intake\";\n}\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n02",
+      "name": "Clean Email Text",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nlet body = d.payload?.body || d.message || \"\";\nbody = body.replace(/^>.*$/gm,\"\").replace(/_{10,}/g,\"\").replace(/De:.*\\nEnviado:.*\\nPara:.*/gm,\"\");\nbody = body.replace(/\\n{3,}/g,\"\\n\\n\").trim();\nd._cleaned_body = body;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst action = d.action || \"intake\";\nconst body = d._cleaned_body || d.message || \"\";\nif([\"generate_pdf\",\"send_proposal\",\"schedule_followup\",\"win_loss\",\"request_approval\"].includes(action)){\n  d._validation={valid:true,missing:[]};d._needs_info=false;return [{json:d}];\n}\nconst missing = [];\nconst hasCustomer = pl.customer?.company_name||pl.customer?.email||pl.from;\nconst hasProduct = pl.requested_products?.length||pl.requested_service||body.length>20;\nif(!hasCustomer) missing.push(\"customer\");\nif(!hasProduct) missing.push(\"requested_products\");\nd._validation={valid:missing.length===0,missing};\nd._needs_info=missing.length>0;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n04",
+      "name": "Check Needs Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._needs_info }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        }
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Extract Customer Demand",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst text = (d._cleaned_body||d.message||pl.body||\"\").toLowerCase();\nconst sub = (pl.subject||\"\").toLowerCase();\nconst full = text + \" \" + sub;\nconst cust = pl.customer || {};\nconst exInmetro = /\\\\bex\\\\b|area classificada|inmetro|zona explosiva|a prova de explos/.test(full);\nconst competitor = /outra empresa|concorrente|mais barato|recebi proposta|cotação de outra/.test(full);\nlet category = \"geral\";\nif(/exaustor/.test(full)) category=\"exaustor\";\nelse if(/ventilador|ventfog/.test(full)) category=\"ventilador\";\nelse if(/climatizador|climatiza/.test(full)) category=\"climatizacao\";\nelse if(/cortina de ar/.test(full)) category=\"cortina_ar\";\nelse if(/micro.?ventilador/.test(full)) category=\"microventilador\";\nlet proposal_type = \"venda\";\nif(/loca.{0,5}o|aluguel/.test(full)) proposal_type=\"locacao\";\nelse if(/manuten.{0,5}o|conserto|reparo/.test(full)) proposal_type=\"manutencao\";\nelse if(/servi.{0,5}o/.test(full)) proposal_type=\"servico\";\nconst qtyM = full.match(/(\\\\d+)\\\\s*(unidade|un|pe.a|equipamento)/);\nd._customer = {\n  company_name: cust.company_name || pl.from?.split(\"@\")[0] || \"Nao identificado\",\n  email: cust.email || pl.from || \"\",\n  contact_name: cust.contact_name || \"\",\n  phone: cust.phone || \"\",\n  cnpj: cust.cnpj || \"\",\n  address: cust.address || \"\"\n};\nd._demand = {\n  requested_products: pl.requested_products || [category],\n  product_category: category,\n  proposal_type,\n  quantity: pl.quantity || (qtyM?qtyM[1]:\"1\"),\n  deadline: pl.deadline || \"\",\n  technical_specs: pl.technical_specs || \"\",\n  budget: pl.budget || 0,\n  urgency: /urgent|urgente|r.pido/.test(full)?\"alta\":\"normal\",\n  ex_inmetro_related: exInmetro,\n  competitor_mentioned: competitor,\n  image_analysis_required: false,\n  pdf_analysis_required: (pl.attachments||[]).length>0\n};\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Customer Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst email = d._customer?.email || \"\";\nconst company = d._customer?.company_name || \"\";\nd._customer_lookup = d.runtime_mode===\"PORTAL\" ? {\n  note:\"TODO: GET /api/clientes/search?query=\"+encodeURIComponent(company),\n  customer_id: null, customer_status:\"unknown\"\n} : {\n  customer_id: \"CUST-MOCK-\" + Math.random().toString(36).substr(2,6).toUpperCase(),\n  customer_status: email.includes(\"@\") ? \"existing\" : \"new\",\n  last_proposal_date: \"2025-01-15\",\n  commercial_owner: \"Vendedor Vesper\",\n  risk_notes: []\n};\nd._customer.id = d._customer_lookup.customer_id;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Template Suggestion",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst dem = d._demand || {};\nconst cat = dem.product_category || \"geral\";\nconst pt = dem.proposal_type || \"venda\";\nconst ex = dem.ex_inmetro_related;\nlet tid = \"TEMPLATE-GERAL\", tname = \"Proposta Geral\", reason = \"padrao\";\nif(ex){tid=\"TEMPLATE-AREA-EX-INMETRO\";tname=\"Proposta Area EX/INMETRO\";reason=\"ex_inmetro_detectado\";}\nelse if(cat===\"exaustor\"){tid=\"TEMPLATE-EXAUSTOR-AXIAL\";tname=\"Proposta Exaustor Axial\";}\nelse if(cat===\"ventilador\"){tid=\"TEMPLATE-VENTILADOR-INDUSTRIAL\";tname=\"Proposta Ventilador Industrial\";}\nelse if(cat===\"climatizacao\"){tid=\"TEMPLATE-CLIMATIZACAO\";tname=\"Proposta Climatizacao\";}\nelse if(pt===\"locacao\"){tid=\"TEMPLATE-LOCACAO-EQUIPAMENTOS\";tname=\"Proposta Locacao\";}\nelse if(pt===\"manutencao\"){tid=\"TEMPLATE-MANUTENCAO\";tname=\"Proposta Manutencao\";}\nd._template = {template_id:tid,template_name:tname,template_confidence:ex?0.99:0.85,template_reason:reason};\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Risk Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2100,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst dem = d._demand || {};\nconst lk = d._customer_lookup || {};\nlet risk = \"low\";\nif(dem.ex_inmetro_related) risk=\"critical\";\nelse if(dem.competitor_mentioned||dem.budget>0||(lk.customer_status===\"new\")) risk=\"high\";\nelse if(dem.product_category!==\"geral\") risk=\"medium\";\nd._risk_level = risk;\nd._requires_approval = [\"high\",\"critical\"].includes(risk);\nd._policy = {\n  requires_approval: [\"high\",\"critical\"].includes(risk),\n  technical_review: dem.ex_inmetro_related===true,\n  send_blocked: true,\n  discount_blocked: true,\n  reason: dem.ex_inmetro_related?\"EX/INMETRO - revisao obrigatoria\":dem.competitor_mentioned?\"Concorrente detectado\":\"padrao\"\n};\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2350,
+        500
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "generate_pdf",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "send_proposal",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "schedule_followup",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "win_loss",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "request_approval",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "technical_review",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Draft Proposal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst cust = d._customer || {};\nconst dem = d._demand || {};\nconst tpl = d._template || {};\nconst pid = d.runtime_mode===\"PORTAL\" ? \"prop_portal_pending\" :\n  \"prop_mock_\"+Math.random().toString(36).substr(2,8);\nd._proposal = {\n  proposal_id: pl.proposal_id || pid,\n  title: `Proposta ${tpl.template_name||\"Geral\"} - ${cust.company_name||\"Cliente\"}`,\n  status: \"draft\",\n  customer: cust,\n  demand: dem,\n  template_id: tpl.template_id,\n  missing_technical: dem.ex_inmetro_related?[\"certificacao_ex\",\"tensao\",\"potencia\",\"norma_aplicavel\"]:[],\n  clarification_needed: d._validation?.missing||[],\n  draft_body: `Prezado(a) ${cust.contact_name||\"Cliente\"},\\n\\nAgradecemos o contato.\\n[RASCUNHO - Completar com especificacoes tecnicas]\\n\\nCorr: ${d.correlation_id}`,\n  portal_synced: false,\n  note: d.runtime_mode===\"PORTAL\"?\"TODO: POST /api/propostas/drafts\":\"MOCK: draft simulado\",\n  created_at: new Date().toISOString()\n};\nd._status = d._demand?.ex_inmetro_related ? \"technical_review_required\" :\n  (d._requires_approval ? \"approval_pending\" : \"draft_created\");\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n11",
+      "name": "Approval Integration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2850,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nif (!d._requires_approval && d._status === \"draft_created\") {\n  return [{json:d}];\n}\nconst pl = d.payload || {};\nconst atype = d._demand?.ex_inmetro_related?\"ex_area_validation\":\"proposal_send\";\nconst aid = pl.approval_id || (\"appr_comercial_\"+Math.random().toString(36).substr(2,8));\nd._approval_id = aid;\nd._approval_payload = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  approval_type: atype,\n  requested_by: d.user,\n  summary: \"Aprovar proposta para: \" + (d._customer?.company_name||\"cliente\"),\n  details: {customer:d._customer,proposal:d._proposal,template:d._template,risk_notes:d._policy?.reason||\"\"},\n  risk_level: d._risk_level,\n  amount: d._demand?.budget||0,\n  currency: \"BRL\"\n};\nd._status = \"approval_pending\";\nconst note = d.runtime_mode===\"PORTAL\"?\n  \"TODO: Execute Workflow WORKFLOW_APPROVAL_CENTER ou POST /webhook/vesper/core/approval/request\":\n  \"MOCK: approval_id=\"+aid;\nd._approval_note = note;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n12",
+      "name": "PDF Generation",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nif(!pl.approved && !pl.approval_id){\n  d._status=\"approval_pending\";\n  d._blocked_reason=\"PDF final requer aprovacao previa\";\n  return [{json:d}];\n}\nconst pdf_id = d.runtime_mode===\"PORTAL\"?\"pdf_portal_pending\":\n  \"pdf_mock_\"+Math.random().toString(36).substr(2,8);\nd._pdf = {\n  pdf_id, pdf_url: d.runtime_mode===\"PORTAL\"?\n    \"TODO: GET /api/propostas/\"+d._proposal?.proposal_id+\"/pdf\":\n    \"http://mock.vesper.local/pdf/\"+pdf_id+\".pdf\",\n  generated_at: new Date().toISOString(),\n  note: d.runtime_mode===\"PORTAL\"?\"TODO: POST /api/propostas/{id}/generate-pdf\":\"MOCK: pdf simulado\"\n};\nd._status=\"pdf_ready\";\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "Send Proposal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nif(!pl.approved && !pl.approval_id){\n  d._status=\"approval_pending\";\n  d._blocked_reason=\"Envio de proposta requer aprovacao\";\n  return [{json:d}];\n}\nd._send_result = {\n  status:\"sent_placeholder\",\n  note:\"NUNCA enviar email real nesta v1 - \" +\n    (d.runtime_mode===\"PORTAL\"?\"TODO: POST /api/propostas/{id}/send\":\"MOCK: sent=true\"),\n  email_disabled: true,\n  sent_at: new Date().toISOString()\n};\nd._status=\"sent_placeholder\";\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n14",
+      "name": "Follow-up Scheduler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        900
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst days = d._demand?.urgency===\"alta\"?1:d._demand?.ex_inmetro_related?3:2;\nd._followup = {\n  followup_id: \"fu_mock_\"+Math.random().toString(36).substr(2,8),\n  proposal_id: pl.proposal_id||d._proposal?.proposal_id||\"\",\n  scheduled_days: days,\n  scheduled_date: new Date(Date.now()+days*86400000).toISOString().split(\"T\")[0],\n  note: d.runtime_mode===\"PORTAL\"?\"TODO: POST /api/propostas/{id}/followup\":\"MOCK: followup agendado\"\n};\nd._status=\"followup_scheduled\";\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "Win Loss Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2600,
+        1100
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;d._status='win_loss_registered';d._win_loss={proposal_id:d.payload?.proposal_id,result:d.payload?.result||'unknown',reason:d.payload?.reason||'',note:d.runtime_mode==='PORTAL'?'TODO: POST /api/propostas/{id}/win-loss':'MOCK: win_loss_logged'};return [{json:d}];"
+      }
+    },
+    {
+      "id": "n16",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nif(d._demand?.ex_inmetro_related && ![\"technical_review_required\",\"approval_pending\"].includes(d._status)){\n  d._risk_level=\"critical\";d._requires_approval=true;\n  if(d._status===\"draft_created\") d._status=\"technical_review_required\";\n}\nif(d._demand?.competitor_mentioned && d._risk_level===\"low\") d._risk_level=\"high\";\nconst evtMap = {\n  \"intake\":\"comercial.intake_received\",\"email_intake\":\"comercial.intake_received\",\n  \"create_draft\":\"comercial.draft_created\",\"technical_review\":\"comercial.technical_review_required\",\n  \"request_approval\":\"comercial.approval_requested\",\"generate_pdf\":\"comercial.pdf_ready\",\n  \"send_proposal\":\"comercial.proposal_send_placeholder\",\"schedule_followup\":\"comercial.followup_scheduled\"\n};\nd._audit = {\n  event_type: evtMap[d.action]||\"comercial.processed\",\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  action: d.action, status: d._status,\n  customer: d._customer||{}, risk_level: d._risk_level||\"low\",\n  runtime_mode: d.runtime_mode, timestamp: new Date().toISOString(),\n  note: d.runtime_mode===\"PORTAL\"?\"TODO: POST /api/automation/audit\":\"MOCK: audit_logged=true\"\n};\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n17",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._status=\"needs_info\";\nconst qs = [];\nconst miss = d._validation?.missing||[];\nif(miss.includes(\"customer\")) qs.push(\"Qual a empresa/cliente e e-mail para contato?\");\nif(miss.includes(\"requested_products\")) qs.push(\"Qual produto ou servico esta buscando?\");\nd._clarification_questions = qs;\nd._clarification_draft = \"Prezado cliente,\\n\\nPara darmos continuidade, precisamos de:\\n\"+qs.map(q=>\"- \"+q).join(\"\\n\")+\"\\n\\nAguardamos retorno.\\nEquipe Vesper\";\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const d=$input.first().json;d._error_note='TODO: vincular WORKFLOW_ERROR_AUDIT nas Settings';return [{json:d}];"
+      }
+    },
+    {
+      "id": "n19",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3350,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst st = d._status || \"success\";\nreturn [{json:{\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  status: st, agent: \"comercial\",\n  workflow: \"COMERCIAL - Quote to Cash Agent\",\n  summary: d._blocked_reason||d._approval_note||d._proposal?.title||st,\n  data: {\n    customer: d._customer||{}, demand: d._demand||{},\n    proposal: d._proposal||{}, template: d._template||{},\n    draft: d._proposal||{}, approval_id: d._approval_id||null,\n    pdf: d._pdf||{}, send_result: d._send_result||{},\n    followup: d._followup||{}, portal_synced: false\n  },\n  missing_fields: d._validation?.missing||[],\n  requires_approval: d._requires_approval||false,\n  approval_id: d._approval_id||null,\n  risk_level: d._risk_level||\"low\",\n  next_action: st===\"draft_created\"?\"request_approval\":\n    st===\"technical_review_required\"?\"complete_technical_specs\":\n    st===\"approval_pending\"?\"wait_for_approval\":\n    st===\"pdf_ready\"?\"send_proposal\":\n    st===\"sent_placeholder\"?\"schedule_followup\":\n    st===\"needs_info\"?\"request_more_info\":\"none\"\n}}];"
+      }
+    },
+    {
+      "id": "n20",
+      "name": "DISABLED - Send Proposal Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        2850,
+        900
+      ],
+      "parameters": {
+        "fromEmail": "={{ $env.SMTP_FROM || 'comercial@portal.example' }}",
+        "toEmail": "=",
+        "subject": "=",
+        "text": "=",
+        "options": {}
+      },
+      "disabled": true
+    },
+    {
+      "id": "s01",
+      "name": "Sticky TESTE",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        350
+      ],
+      "parameters": {
+        "content": "## TESTE\nManual Trigger:\n```json\n{\"runtime_mode\":\"TESTE\",\"message\":\"Proposta exaustor axial para galpao\"}\n```\nSem chamadas reais.",
+        "width": 300,
+        "height": 200
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Sticky MOCK",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        580
+      ],
+      "parameters": {
+        "content": "## MOCK\nWebhook POST /webhook/vesper/comercial/quote-to-cash\nruntime_mode=MOCK\nSimula cliente, template, rascunho e follow-up.",
+        "width": 300,
+        "height": 200
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Sticky PORTAL",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        810
+      ],
+      "parameters": {
+        "content": "## PORTAL\nruntime_mode=PORTAL\nBase: $env.VESPER_PORTAL_BASE_URL\nToken: $env.VESPER_PORTAL_API_KEY\nNao hardcode credenciais.",
+        "width": 300,
+        "height": 180
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Sticky Gateway",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        1020
+      ],
+      "parameters": {
+        "content": "## Gateway -> Comercial\nGateway ID: WORKFLOW_GATEWAY_SUPERVISOR\nFuturo: Execute Workflow ou POST /webhook/vesper/comercial/quote-to-cash",
+        "width": 300,
+        "height": 160
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Sticky Approval",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        1200
+      ],
+      "parameters": {
+        "content": "## Approval Center\nID: WORKFLOW_APPROVAL_CENTER\nEm PORTAL: Execute Workflow\nEm MOCK: appr_comercial_xxxx simulado",
+        "width": 300,
+        "height": 160
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Sticky Endpoints",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        1380
+      ],
+      "parameters": {
+        "content": "## Endpoints Portal\nPOST /api/propostas/drafts\nPOST /api/propostas/{id}/generate-pdf\nPOST /api/propostas/{id}/send\nPOST /api/propostas/{id}/followup\nGET /api/clientes/search\nPOST /api/automation/audit",
+        "width": 300,
+        "height": 220
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Sticky IMAP PDF",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        1620
+      ],
+      "parameters": {
+        "content": "## IMAP/SMTP/PDF Futuro\nIMAP: n8n Email Trigger (nao ativo v1)\nSMTP: EmailSend desativado\nPDF: puppeteer/portal backend\nNUNCA enviar email real direto nesta v1",
+        "width": 300,
+        "height": 180
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Comercial": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Clean Email Text",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Clean Email Text": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Extract Customer Demand",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Customer Demand": {
+      "main": [
+        [
+          {
+            "node": "Customer Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Customer Lookup": {
+      "main": [
+        [
+          {
+            "node": "Template Suggestion",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Template Suggestion": {
+      "main": [
+        [
+          {
+            "node": "Risk Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Classification": {
+      "main": [
+        [
+          {
+            "node": "Switch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action": {
+      "main": [
+        [
+          {
+            "node": "PDF Generation",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Follow-up Scheduler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Win Loss Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Approval Integration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Draft Proposal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Proposal": {
+      "main": [
+        [
+          {
+            "node": "Approval Integration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Integration": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PDF Generation": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Proposal": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Follow-up Scheduler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Win Loss Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "55913f78-061a-4967-b3f6-39e79cd64dab",
+  "tags": []
+}

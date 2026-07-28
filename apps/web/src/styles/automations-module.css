@@ -1,0 +1,258 @@
+.automations-page .metric-grid {
+  margin-bottom: 0;
+}
+
+.automations-filters-card {
+  padding: var(--space-md);
+}
+
+.automation-card-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: var(--space-md);
+}
+
+.automation-row-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) repeat(5, minmax(0, auto)) auto;
+  gap: 16px;
+  align-items: center;
+  padding: 16px 18px;
+  transition: border-color 0.2s, transform 0.2s;
+}
+
+.automation-row-card:hover {
+  border-color: rgba(168, 85, 247, 0.4);
+  transform: translateY(-1px);
+}
+
+.automation-row-card__title {
+  margin: 0 0 6px;
+  color: #fff;
+  font-size: 15px;
+  font-weight: 700;
+}
+
+.automation-row-card__meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.automation-row-card__col {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.automation-row-card__actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+.automation-urgent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.automation-urgent-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(168, 85, 247, 0.25);
+  background: rgba(168, 85, 247, 0.08);
+  cursor: pointer;
+  text-align: left;
+  color: inherit;
+  font: inherit;
+}
+
+.automation-urgent-item:hover {
+  border-color: rgba(168, 85, 247, 0.45);
+}
+
+.automation-urgent-item strong {
+  color: #fff;
+  font-size: 13px;
+}
+
+.automation-urgent-item span {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.risk-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.risk-low {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.risk-medium {
+  background-color: rgba(245, 158, 11, 0.15);
+  color: #fbbf24;
+}
+
+.risk-high {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.risk-critical {
+  background-color: rgba(220, 38, 38, 0.25);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  animation: pulse 2s infinite;
+}
+
+@keyframes pulse {
+  0% { opacity: 0.9; }
+  50% { opacity: 0.6; }
+  100% { opacity: 0.9; }
+}
+
+@media (max-width: 1100px) {
+  .automation-row-card {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  .automation-row-card__actions {
+    justify-content: flex-start;
+  }
+}
+
+.exec-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badge-executable {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.badge-blocked {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+.badge-future {
+  background-color: rgba(139, 92, 246, 0.15);
+  color: #c084fc;
+}
+
+/* Estilos para as Abas de Automações */
+.automations-tabs {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 24px;
+  border-bottom: 1px solid var(--border-color);
+  padding-bottom: 8px;
+}
+
+.automations-tab-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  border-radius: var(--radius-md);
+  transition: all 0.2s ease-in-out;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.automations-tab-btn:hover {
+  color: #fff;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.automations-tab-btn.active {
+  color: #fff;
+  background-color: rgba(139, 92, 246, 0.15);
+  border: 1px solid rgba(139, 92, 246, 0.3);
+}
+
+/* Switch Toggle Premium */
+.switch-toggle {
+  position: relative;
+  display: inline-flex;
+  width: 44px;
+  height: 22px;
+  border-radius: 9999px;
+  background-color: #334155;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+  padding: 0;
+  align-items: center;
+}
+
+.switch-toggle.switch-on {
+  background-color: #10b981;
+  border-color: rgba(16, 185, 129, 0.3);
+}
+
+.switch-slider {
+  display: block;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+  transition: transform 0.2s ease-in-out;
+  transform: translateX(3px);
+}
+
+.switch-toggle.switch-on .switch-slider {
+  transform: translateX(23px);
+}
+
+.switch-toggle:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Badge de Regra Ativa */
+.rule-status-badge {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.rule-active {
+  background-color: rgba(16, 185, 129, 0.15);
+  color: #34d399;
+}
+
+.rule-inactive {
+  background-color: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+}
+
+

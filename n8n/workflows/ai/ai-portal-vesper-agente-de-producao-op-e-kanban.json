@@ -1,0 +1,747 @@
+{
+  "updatedAt": "2026-05-20T17:42:13.624Z",
+  "createdAt": "2026-05-20T16:34:35.259Z",
+  "name": "AI - PORTAL VESPER - Agente de Produção OP e Kanban",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "7ffb3872-3adb-42d8-91bd-8707a0eb901e",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "bfb8b29f-9df4-442a-b5bd-47ffc1076623",
+      "name": "Consultar OPs Ativas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        208
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b65978fc-55be-4f74-84fd-d49e493106fd",
+      "name": "Verificar Erro OPs",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        688,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "899b70cd-4461-49ea-9642-d3d4f63d281b",
+      "name": "Combinar OPs e Kanban",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        912,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "",
+        "options": {}
+      },
+      "id": "34b10983-6362-4e68-8f13-f35ff10fc21c",
+      "name": "Webhook Manual",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "39ac4d8d-11e9-4dfb-b980-a4dd4560fddf",
+      "name": "Consultar Cards Kanban",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        496
+      ],
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.id }}",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "isEmpty"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e6d416a1-d186-4028-b561-a5fb1c5cb630",
+      "name": "Verificar Erro Kanban",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        688,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analise os seguintes dados de produção do Portal Vesper:\n\n{{ $json }}\n\nIdentifique:\n1. Nível de risco (baixo/médio/alto/crítico)\n2. Problemas específicos (checklist incompleto, atraso, falta de material, responsável ausente, card parado)\n3. Recomendações de ação\n4. Comentário sugerido para registro\n5. Se requer atenção imediata\n6. Score de prioridade (0-100)\n\nCritérios de risco:\n- Crítico: prazo vencido OU falta de material OU >7 dias parado\n- Alto: prazo <5 dias OU checklist <50% OU >3 dias parado\n- Médio: prazo <10 dias OU checklist <80%\n- Baixo: demais casos",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um especialista em gestão de produção industrial. Analise dados de OPs e Kanban, identifique riscos e sugira ações. Seja objetivo e prático. NUNCA sugira mover cards, finalizar OPs ou alterar prazos automaticamente - apenas recomende essas ações para aprovação humana.",
+          "maxIterations": 5,
+          "returnIntermediateSteps": false
+        }
+      },
+      "id": "43a2aac8-cb3b-403f-aaab-4dfafca273f5",
+      "name": "Agente de Análise de Produção",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1136,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.3
+        }
+      },
+      "id": "e0bc9053-c53f-47ca-9df5-fdbdb5b436b6",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1152,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "item_id": "OP-001",
+          "tipo": "OP",
+          "nivel_risco": "alto",
+          "problemas_identificados": [
+            "Checklist incompleto",
+            "Prazo próximo"
+          ],
+          "recomendacoes": [
+            "Completar checklist urgente",
+            "Verificar disponibilidade de recursos"
+          ],
+          "comentario_sugerido": "OP com risco alto: checklist incompleto e prazo em 5 dias",
+          "requer_atencao_imediata": true,
+          "score_prioridade": 85
+        }
+      },
+      "id": "bf8c527f-28da-41c6-ae31-12a30e183494",
+      "name": "Parser de Análise",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1280,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.output.requer_atencao_imediata }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.nivel_risco }}",
+              "rightValue": "crítico",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            },
+            {
+              "leftValue": "={{ $json.output.nivel_risco }}",
+              "rightValue": "alto",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "38f67a28-f679-4a1d-b0e1-d156e136e0ef",
+      "name": "Filtrar Itens Críticos",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        1488,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "resumo",
+              "value": "={{ $json.output.item_id }} - {{ $json.output.tipo }} - Risco: {{ $json.output.nivel_risco }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "problemas",
+              "value": "={{ $json.output.problemas_identificados.join(\", \") }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "recomendacoes",
+              "value": "={{ $json.output.recomendacoes.join(\", \") }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "comentario",
+              "value": "={{ $json.output.comentario_sugerido }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "item_id",
+              "value": "={{ $json.output.item_id }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "score",
+              "value": "={{ $json.output.score_prioridade }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "29ba39bd-50db-43f6-bacd-05048598fd53",
+      "name": "Preparar Dados de Aprovação",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1712,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/automation/approvals",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"action_type\": $json.acao_original || $json.acao || \"unknown\", \"description\": $json.detalhes || $json.assunto || \"Aprovação necessária\", \"requester\": $json.user || \"n8n_agent\", \"correlation_id\": $json.correlation_id || $execution.id, \"metadata\": $json } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "b9d54aab-dd8d-4686-b8cc-ed32f14408f8",
+      "name": "Solicitar Aprovação Humana",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1936,
+        400
+      ],
+      "notes": "CONVERTIDO: Email sendAndWait → POST /api/automation/approvals"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "11ec07b7-3a5f-469b-85ed-12c08455d44f",
+      "name": "Verificar Aprovação",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2160,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"item_id\": $(\"Preparar Dados de Aprovação\").item.json.item_id, \"comentario\": $(\"Preparar Dados de Aprovação\").item.json.comentario, \"autor\": \"Agente IA n8n\", \"timestamp\": $now.toISO(), \"aprovado_por\": $json.approvedBy } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "6fd8d62d-2ecc-41db-82e4-02a8910c8828",
+      "name": "Registrar Comentário Aprovado",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2384,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Registrar log de auditoria\nconst items = $input.all();\nconst logs = items.map(item => ({\n  timestamp: new Date().toISOString(),\n  workflow_id: $workflow.id,\n  execution_id: $execution.id,\n  item_id: item.json.item_id || 'N/A',\n  acao: item.json.approved ? 'aprovado' : 'rejeitado',\n  usuario: item.json.approvedBy || 'sistema',\n  detalhes: {\n    resumo: item.json.resumo,\n    score: item.json.score,\n    problemas: item.json.problemas,\n    recomendacoes: item.json.recomendacoes\n  }\n}));\n\n// Retornar logs para próximo nó (pode ser enviado para banco de dados)\nreturn logs.map(log => ({ json: log }));"
+      },
+      "id": "0fd378c7-3ce9-42e4-b367-47035a803261",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2384,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true,
+              "responseFormat": "json"
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "b297afeb-9365-40c1-9e6a-1af0f832cfda",
+      "name": "Salvar Log de Auditoria",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2608,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Gerar relatório consolidado\nconst items = $input.all();\nconst total = items.length;\nconst aprovados = items.filter(i => i.json.acao === 'aprovado').length;\nconst rejeitados = total - aprovados;\n\nconst relatorio = {\n  data_execucao: new Date().toISOString(),\n  total_itens_analisados: total,\n  acoes_aprovadas: aprovados,\n  acoes_rejeitadas: rejeitados,\n  taxa_aprovacao: total > 0 ? ((aprovados / total) * 100).toFixed(2) + '%' : '0%',\n  itens: items.map(i => ({\n    item_id: i.json.item_id,\n    acao: i.json.acao,\n    score: i.json.score\n  }))\n};\n\nreturn [{ json: relatorio }];"
+      },
+      "id": "25a80b32-82f1-4f7f-a656-ca62d5ec8e08",
+      "name": "Gerar Relatório Final",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2832,
+        592
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "4e9ee132-45e8-4409-8a51-e9efadd8adfb",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Agendamento Diário": {
+      "main": [
+        [
+          {
+            "node": "Consultar OPs Ativas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar OPs Ativas": {
+      "main": [
+        [
+          {
+            "node": "Verificar Erro OPs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Erro OPs": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Combinar OPs e Kanban",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar OPs e Kanban": {
+      "main": [
+        [
+          {
+            "node": "Agente de Análise de Produção",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Manual": {
+      "main": [
+        [
+          {
+            "node": "Consultar Cards Kanban",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Cards Kanban": {
+      "main": [
+        [
+          {
+            "node": "Verificar Erro Kanban",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Erro Kanban": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Combinar OPs e Kanban",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Agente de Análise de Produção": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Itens Críticos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de Análise de Produção",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser de Análise": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de Análise de Produção",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Itens Críticos": {
+      "main": [
+        [
+          {
+            "node": "Preparar Dados de Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Dados de Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Solicitar Aprovação Humana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar Aprovação Humana": {
+      "main": [
+        [
+          {
+            "node": "Verificar Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Registrar Comentário Aprovado",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        []
+      ]
+    },
+    "Registrar Comentário Aprovado": {
+      "main": [
+        []
+      ]
+    },
+    "Registrar Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Salvar Log de Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar Log de Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Gerar Relatório Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gerar Relatório Final": {
+      "main": [
+        []
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Consultar Cards Kanban",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "4e29e5c9-13a1-417e-9336-91feeded0c09",
+  "tags": []
+}

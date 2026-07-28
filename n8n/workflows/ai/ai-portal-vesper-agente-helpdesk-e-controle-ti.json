@@ -1,0 +1,514 @@
+{
+  "updatedAt": "2026-05-20T17:43:17.132Z",
+  "createdAt": "2026-05-20T16:34:49.467Z",
+  "name": "AI - PORTAL VESPER - Agente HelpDesk e Controle TI",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "options": {
+          "inputPlaceholder": "Descreva seu problema...",
+          "loadPreviousSession": "memory",
+          "showWelcomeScreen": true,
+          "getStarted": "Iniciar Atendimento",
+          "subtitle": "Suporte técnico disponível 24/7",
+          "title": "Portal VESPER - HelpDesk TI"
+        }
+      },
+      "id": "717de821-94d0-4bc0-afe7-4a292a76cc74",
+      "name": "Chat HelpDesk",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um agente de triagem de HelpDesk de TI do Portal VESPER. Classifique o problema do usuário nas seguintes categorias:\n\nCATEGORIAS:\n- hardware: computador, notebook, monitor, teclado, mouse, impressora\n- software: instalação, atualização, erro de aplicativo, lentidão\n- rede: internet, wifi, cabo de rede, VPN\n- email: acesso, envio, recebimento, configuração\n- acesso: login, senha, bloqueio de conta, permissões\n- certificado: digital, vencido, instalação\n- erp: SAP, Oracle, sistema interno\n- portal: acesso ao portal, funcionalidades\n- ativos: consulta de equipamentos, inventário\n\nPRIORIDADE:\n- critica: sistema parado, muitos usuários afetados\n- alta: usuário bloqueado, não consegue trabalhar\n- media: problema intermitente, workaround disponível\n- baixa: dúvida, solicitação de melhoria\n\nAÇÕES SENSÍVEIS (requer_aprovacao: true):\n- Resetar senha\n- Alterar permissões de acesso\n- Excluir usuário\n- Modificar configurações de segurança\n- Acessar dados confidenciais\n\nRetorne sempre um JSON com: categoria, subcategoria, prioridade, descricao, requer_aprovacao (boolean), acao_sugerida."
+        }
+      },
+      "id": "b833630b-d90a-4d4b-97ba-6a861260b523",
+      "name": "Agente de Triagem",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        656,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "58809157-7407-4446-9534-e917345e6f16",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "id": "51281b02-0bde-4ce6-b760-fb92173b234d",
+      "name": "Memória da Conversa",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "categoria": "hardware",
+          "subcategoria": "computador",
+          "prioridade": "alta",
+          "descricao": "Computador não liga",
+          "requer_aprovacao": false,
+          "acao_sugerida": "verificar_fonte"
+        }
+      },
+      "id": "66601533-ffec-4aba-a1d1-c59df932a996",
+      "name": "Parser Estruturado",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        848,
+        624
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "580f1905-54ff-4d0e-b175-7bb8818d19e7",
+      "name": "Criar Chamado",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1056,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $(\"Agente de Triagem\").item.json.output.requer_aprovacao }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              },
+              "rightValue": ""
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6d9d9f22-ed83-442b-87e4-7a17517f4fbd",
+      "name": "Requer Aprovação?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1280,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "webhook",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "limitWaitTime": true,
+        "resumeAmount": 24,
+        "options": {}
+      },
+      "id": "5e71b0ac-749b-4f1f-9189-b939b73a33d2",
+      "name": "Aguardar Aprovação",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1728,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "2f1944b9-4a0d-4dcb-b26e-fa84bab7ab93",
+      "name": "Combinar Dados",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        1952,
+        384
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "categoria",
+              "value": "={{ $(\"Agente de Triagem\").item.json.output.categoria }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "de60f2a5-c71d-4f33-81fc-7bd9efb51609",
+      "name": "Consultar Ativos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1728,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "status",
+              "value": "todos"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "34e6502a-08ce-499b-853d-39c9205ec215",
+      "name": "Consultar Certificados",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1728,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ \"Baseado no chamado #\" + $(\"Criar Chamado\").item.json.id + \":\\n\\n\" + \"Categoria: \" + $(\"Agente de Triagem\").item.json.output.categoria + \"\\n\" + \"Descrição: \" + $(\"Agente de Triagem\").item.json.output.descricao + \"\\n\" + \"Prioridade: \" + $(\"Agente de Triagem\").item.json.output.prioridade + \"\\n\\n\" + \"Forneça uma solução detalhada passo a passo para resolver este problema. Inclua verificações iniciais, possíveis causas e soluções. Se houver dados de ativos ou certificados disponíveis, considere-os na solução.\" }}",
+        "options": {
+          "systemMessage": "Você é um especialista em suporte técnico de TI. Forneça soluções claras, práticas e detalhadas. Sempre inclua: 1) Verificações iniciais, 2) Diagnóstico, 3) Solução passo a passo, 4) Prevenção futura."
+        }
+      },
+      "id": "3d12f28d-05fb-4d4a-ba94-867aebc799da",
+      "name": "Gerar Solução",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        2176,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "4a4e99f7-724e-4ac0-8628-29c813110155",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2528,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "chamado_id",
+              "value": "={{ $(\"Criar Chamado\").item.json.id }}",
+              "type": "number"
+            },
+            {
+              "id": "2",
+              "name": "status",
+              "value": "resolvido",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "solucao",
+              "value": "={{ $(\"Gerar Solução\").item.json.output }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "data_resolucao",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "be244020-8054-4f49-8255-a6084a19a5c0",
+      "name": "Atualizar Status",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2976,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "bfde4783-91e0-40bc-b0c2-971364c1e2b3",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Chat HelpDesk": {
+      "main": [
+        [
+          {
+            "node": "Agente de Triagem",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de Triagem": {
+      "main": [
+        [
+          {
+            "node": "Criar Chamado",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de Triagem",
+            "type": "ai_languageModel",
+            "index": 0
+          },
+          {
+            "node": "Gerar Solução",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória da Conversa": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente de Triagem",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Estruturado": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de Triagem",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Chamado": {
+      "main": [
+        [
+          {
+            "node": "Requer Aprovação?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consultar Certificados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requer Aprovação?": {
+      "main": [
+        [],
+        [
+          {
+            "node": "Consultar Ativos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Dados": {
+      "main": [
+        [
+          {
+            "node": "Gerar Solução",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Ativos": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Consultar Certificados": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Gerar Solução": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Auditoria": {
+      "main": [
+        []
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Chat HelpDesk",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "e1a0f717-36e4-4b0a-9e1d-2c04f0e8591a",
+  "tags": []
+}

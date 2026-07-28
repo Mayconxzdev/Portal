@@ -1,0 +1,28 @@
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = ["E", "F", "W"]
+ignore = [
+    "E711", # Comparison to None (SQLAlchemy)
+    "E712", # Comparison to True/False (SQLAlchemy)
+    "E501", # Line too long
+    "W293", # Blank line contains whitespace
+    "F401", # Unused import
+    "F841", # Local variable is assigned to but never used
+    "E302", # Expected 2 blank lines
+    "E303", # Too many blank lines
+    "E305", # Expected 2 blank lines after class/function
+    "E261", # At least two spaces before inline comment
+    "E265", # Block comment should start with '# '
+    "W291", # Trailing whitespace
+    "E713", # Test for membership should be 'not in'
+    "E714", # Test for object identity should be 'is not'
+    "E701", # Multiple statements on one line
+    "E741", # Ambiguous variable name
+    "E402", # Module level import not at top of file (evita quebra de imports circulares nas rotas)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"app/models/*" = ["F821"] # Ignora undefined names de anotações de strings do SQLAlchemy Mapped

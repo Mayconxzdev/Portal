@@ -1,0 +1,847 @@
+{
+  "updatedAt": "2026-05-20T13:03:40.231Z",
+  "createdAt": "2026-05-19T16:29:13.229Z",
+  "name": "CORE - Approval Center",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "d5716cb7-4389-421a-9036-ab3e6cb5af56",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c478e3da-487f-4ea9-841a-1e8aa31ab54d",
+      "name": "Webhook Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {
+        "path": "vesper/core/approval/request",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "d305f8e6-0591-4498-9aa7-6a6edc42596a",
+      "name": "Webhook Respond",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "path": "vesper/core/approval/respond",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "f35e5b00-6ded-4539-a5b4-22a80b95d30b",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "c4d1757d-1817-4480-8db0-c9d1ad89b499",
+      "name": "Sticky Notes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -50,
+        -100
+      ],
+      "parameters": {
+        "content": "## CORE - Approval Center\n\n1. Use TESTE mode to mock approval locally without side effects.\n2. Use MOCK mode for data table persistence without portal sync.\n3. PORTAL uses HTTP Requests.\n4. Future workflows can call via Execute Workflow or Webhook.\n\nEndpoints:\n- POST /webhook/vesper/core/approval/request\n- POST /webhook/vesper/core/approval/respond\n- Portal will be expected at POST /api/automation/approvals"
+      }
+    },
+    {
+      "id": "50120ea2-bf34-4b30-95bd-1a5f98a53061",
+      "name": "Determine Route",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        400,
+        200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst raw = $input.first().json;\nconst body = raw.body || raw;\nlet action = raw.action || body.action || \"request\";\n\nconst text = (body.summary || body.message || \"\").toLowerCase();\nif (body.decision !== undefined || /aprovar|rejeitar|aprovado|rejeitado|approved|rejected/.test(text)) {\n    action = \"respond\";\n}\n\nreturn [{\n    json: {\n        action: action,\n        payload: body\n    }\n}];\n"
+      }
+    },
+    {
+      "id": "42fe6f6e-fb50-4aa6-bf4c-f8a43cd39e79",
+      "name": "Switch Action Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        600,
+        200
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "respond",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cede94ee-ad00-477d-911e-5411d4677887",
+      "name": "Normalize Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nfunction generateId() { return Math.random().toString(36).substr(2, 9); }\nconst raw = $input.first().json;\nconst data = raw.payload || raw.body || raw;\n\nconst req = {\n    runtime_mode: data.runtime_mode || $env.VESPER_RUNTIME_MODE || \"MOCK\",\n    correlation_id: data.correlation_id || \"req_\" + generateId(),\n    request_id: data.request_id || \"req_\" + generateId(),\n    approval_id: data.approval_id || \"appr_\" + generateId(),\n    source: data.source || \"manual\",\n    approval_type: data.approval_type || \"other\",\n    requested_by: data.requested_by || { id: \"\", name: \"System\", role: \"\", department: \"\" },\n    approver: data.approver || { id: \"\", name: \"\", role: \"\", department: \"\" },\n    approver_role: data.approver_role || \"\",\n    summary: data.summary || \"\",\n    details: data.details || {},\n    risk_level: data.risk_level || \"low\",\n    amount: data.amount || 0,\n    currency: data.currency || \"BRL\",\n    expires_at: data.expires_at || new Date(Date.now() + 86400000).toISOString(),\n    callback: data.callback || { workflow: \"\", url: \"\", method: \"POST\" },\n    metadata: data.metadata || {}\n};\n\nreturn [{ json: req }];\n"
+      }
+    },
+    {
+      "id": "849ff575-719f-4a4a-8d66-02d4524c801a",
+      "name": "Validate Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst req = $input.first().json;\nlet isValid = true;\nlet invalidReason = [];\n\nif (!req.summary) { isValid = false; invalidReason.push(\"summary is required\"); }\nif (!req.approval_type) { isValid = false; invalidReason.push(\"approval_type is required\"); }\n\nreq._validation = {\n    valid: isValid,\n    reason: invalidReason.join(\", \")\n};\n\nif (!isValid) {\n    req.status = \"invalid\";\n} else {\n    req.status = \"pending\";\n}\n\nreturn [{ json: req }];\n"
+      }
+    },
+    {
+      "id": "67f3c114-5eac-4be3-829b-3621bee1b23f",
+      "name": "Policy Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst req = $input.first().json;\n\nif (req.status === \"invalid\") return [{ json: req }];\n\nlet risk = req.risk_level;\n\nconst highRiskTypes = ['data_deletion', 'it_access'];\nif (highRiskTypes.includes(req.approval_type) && (risk === 'low' || risk === 'medium')) {\n    risk = 'high';\n}\n\nif (req.approval_type.includes('ex_') || req.approval_type.includes('inmetro')) {\n    risk = 'high';\n}\n\nif (risk === 'critical') {\n    req.requires_approval = true;\n} else {\n    req.requires_approval = true;\n}\n\nreq.risk_level = risk;\n\nif (req.amount > 0 && req.approval_type === 'purchase_order') {\n    req.metadata.amount_logged = true;\n}\n\nif (req.runtime_mode === 'TESTE') {\n    if (req.metadata.test_decision === 'approved' && req.risk_level !== 'critical') {\n        req.status = 'approved';\n        req.decision = 'approved';\n    } else if (req.metadata.test_decision === 'rejected') {\n        req.status = 'rejected';\n        req.decision = 'rejected';\n    }\n}\n\nreturn [{ json: req }];\n"
+      }
+    },
+    {
+      "id": "825bffc7-a3d6-45ec-ba97-b98a6edc3522",
+      "name": "Switch Mode Request",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        0
+      ],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.runtime_mode}}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "TESTE",
+              "operation": "equal"
+            },
+            {
+              "value2": "MOCK",
+              "operation": "equal"
+            },
+            {
+              "value2": "PORTAL",
+              "operation": "equal"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "cd203a89-c15e-4f7a-93ce-793bad2ba417",
+      "name": "TESTE - Mock Req",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        -100
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst req = $input.first().json;\nreq.portal_synced = false;\nreq.message = \"TESTE Mode: Validated. No real DB or Portal hit.\";\nreturn [{ json: req }];\n"
+      }
+    },
+    {
+      "id": "622bc8d9-b684-4ea1-a773-cadb67b1ffc6",
+      "name": "MOCK - DB Table Placeholder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        100
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst req = $input.first().json;\nreq.portal_synced = false;\nreq.message = \"MOCK Mode: Would save to vesper_approvals data table.\";\nreq.metadata.saved_to_db = true;\nreturn [{ json: req }];\n"
+      }
+    },
+    {
+      "id": "a48279cc-b938-46fd-bb3a-6f4a15a6d982",
+      "name": "PORTAL - Sync Approval",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1850,
+        300
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/automation/approvals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "0f583b63-c7d8-472b-ae37-0a97b184cd12",
+      "name": "Check Portal Error",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst req = $input.first().json;\nif (req.error) {\n    req.portal_synced = false;\n    req.message = \"PORTAL Sync Failed, fallback to local\";\n} else {\n    req.portal_synced = true;\n}\nreturn [{ json: req }];\n"
+      }
+    },
+    {
+      "id": "af8e095e-5a9d-43d9-8b38-c5eadea67c83",
+      "name": "DISABLED - Notify Approver",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "disabled": true,
+      "position": [
+        2250,
+        100
+      ],
+      "parameters": {
+        "fromEmail": "alerts@portal.example",
+        "toEmail": "={{$json.approver && $json.approver.name ? $json.approver.name + '@portal.example' : 'admin@portal.example'}}",
+        "subject": "=[Vesper] Approval Required: {{$json.summary}}",
+        "html": "=<h3>Approval Request</h3><p>{{$json.details}}</p><p>Risk: {{$json.risk_level}}</p><p>Amount: {{$json.amount}} {{$json.currency}}</p>"
+      }
+    },
+    {
+      "id": "6025244d-fc4f-4281-a112-fa64400412dc",
+      "name": "Standard Output REQUEST",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2550,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst req = $input.first().json;\n\nlet finalStatus = req.status;\nif (finalStatus === 'pending') finalStatus = 'approval_pending';\nif (!req._validation.valid) finalStatus = 'invalid';\n\nlet nextAction = \"wait_for_approval\";\nif (finalStatus === \"invalid\") nextAction = \"manual_review\";\nif (finalStatus === \"approved\" || finalStatus === \"rejected\") nextAction = \"none\";\n\nconst out = {\n  correlation_id: req.correlation_id,\n  request_id: req.request_id,\n  status: finalStatus,\n  agent: \"core\",\n  workflow: \"CORE - Approval Center\",\n  summary: req.summary || \"Approval recorded\",\n  message: req.message || \"\",\n  metadata: req.metadata || {},\n  data: {\n    approval_id: req.approval_id,\n    approval_type: req.approval_type,\n    approval_status: req.status,\n    risk_level: req.risk_level,\n    amount: req.amount,\n    currency: req.currency,\n    portal_synced: req.portal_synced || false,\n    notification_prepared: true\n  },\n  missing_fields: req._validation.valid ? [] : req._validation.reason.split(','),\n  requires_approval: req.requires_approval,\n  approval_id: req.approval_id,\n  risk_level: req.risk_level,\n  next_action: nextAction\n};\n\nreturn [{ json: out }];\n"
+      }
+    },
+    {
+      "id": "4c65ac42-889e-4bfa-9f68-768b697f177d",
+      "name": "Normalize Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nfunction generateId() { return Math.random().toString(36).substr(2, 9); }\nconst raw = $input.first().json;\nconst data = raw.payload || raw.body || raw;\n\nlet approval_id = data.approval_id || \"\";\nlet decision = data.decision || \"\";\n\nconst text = (data.summary || data.message || \"\").toLowerCase();\nif (!approval_id) {\n    const apprMatch = text.match(/appr_\\w+/);\n    if (apprMatch) approval_id = apprMatch[0];\n}\nif (!approval_id && data.details?.gateway_entities?.approval_id) {\n    approval_id = data.details.gateway_entities.approval_id;\n}\n\nif (!decision) {\n    if (/aprov|approved/.test(text)) decision = \"approved\";\n    else if (/rejeit|reject/.test(text)) decision = \"rejected\";\n}\n\nconst res = {\n    runtime_mode: data.runtime_mode || $env.VESPER_RUNTIME_MODE || \"MOCK\",\n    correlation_id: data.correlation_id || \"req_\" + generateId(),\n    request_id: data.request_id || \"req_\" + generateId(),\n    approval_id: approval_id,\n    decision: decision,\n    reason: data.reason || \"\",\n    responded_by: data.responded_by || { id: \"\", name: \"System\", role: \"\", department: \"\" },\n    metadata: data.metadata || {}\n};\n\nreturn [{ json: res }];\n"
+      }
+    },
+    {
+      "id": "08c9c0d3-e431-429f-b33b-9e2cd9211431",
+      "name": "Validate Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst res = $input.first().json;\nlet isValid = true;\nlet reason = [];\n\nif (!res.approval_id) { isValid = false; reason.push(\"approval_id is required\"); }\nif (res.decision !== \"approved\" && res.decision !== \"rejected\") { \n    isValid = false; \n    reason.push(\"decision must be approved or rejected\"); \n}\n\nres._validation = {\n    valid: isValid,\n    reason: reason.join(\", \")\n};\n\nif (!isValid) res.status = \"invalid\";\n\nreturn [{ json: res }];\n"
+      }
+    },
+    {
+      "id": "30dc9d7c-95dc-444f-992f-59b2a7219180",
+      "name": "Check Permission Placeholder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst res = $input.first().json;\nres.permission_checked = true;\nres.message = \"Portal will enforce final approval permissions.\";\nreturn [{ json: res }];\n"
+      }
+    },
+    {
+      "id": "d342afd6-8320-443a-86e0-8316f027260a",
+      "name": "Switch Mode Respond",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        1600,
+        400
+      ],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.runtime_mode}}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "TESTE",
+              "operation": "equal"
+            },
+            {
+              "value2": "MOCK",
+              "operation": "equal"
+            },
+            {
+              "value2": "PORTAL",
+              "operation": "equal"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "dec4c891-7f37-4dae-8cfa-bb1748c8d4aa",
+      "name": "TESTE - Sim Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst res = $input.first().json;\nres.portal_synced = false;\nres.message = \"TESTE: decision mocked\";\nreturn [{ json: res }];\n"
+      }
+    },
+    {
+      "id": "894edd9c-e65d-4148-b8e0-af70370f3bd1",
+      "name": "MOCK - Sim DB Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        600
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst res = $input.first().json;\nres.portal_synced = false;\nres.message = \"MOCK: would update DB table vesper_approvals\";\nres.metadata.updated_in_db = true;\nreturn [{ json: res }];\n"
+      }
+    },
+    {
+      "id": "d5b944ce-7562-4777-a2e4-dca7c6ec69ba",
+      "name": "PORTAL - Sync Respond",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1850,
+        800
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/automation/approvals/{{$json.approval_id}}/respond",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "onError": "continueErrorOutput"
+    },
+    {
+      "id": "9c5b881e-3681-495c-b86f-5f7a113f51ea",
+      "name": "Check Portal Error Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        800
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst res = $input.first().json;\nif (res.error) {\n    res.portal_synced = false;\n    res.message = \"PORTAL Sync Failed, fallback to local\";\n} else {\n    res.portal_synced = true;\n}\nreturn [{ json: res }];\n"
+      }
+    },
+    {
+      "id": "394bf150-98bd-4c60-bef9-0b7b14c8aeaa",
+      "name": "Callback Placeholder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "disabled": true,
+      "position": [
+        2250,
+        500
+      ],
+      "parameters": {
+        "method": "POST",
+        "url": "={{$json.callback?.url || 'http://placeholder'}}",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      }
+    },
+    {
+      "id": "709bf286-c78a-4927-97d8-b5f19c1b2bc3",
+      "name": "Standard Output RESPOND",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2550,
+        500
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "\nconst res = $input.first().json;\n\nlet finalStatus = res.decision;\nif (!res._validation.valid) finalStatus = \"invalid\";\n\nlet nextAction = \"continue_workflow\";\nif (finalStatus === \"invalid\") nextAction = \"manual_review\";\nif (finalStatus === \"rejected\") nextAction = \"stop_workflow\";\n\nconst out = {\n  correlation_id: res.correlation_id,\n  request_id: res.request_id,\n  status: finalStatus,\n  agent: \"core\",\n  workflow: \"CORE - Approval Center\",\n  summary: `Approval ${res.decision}`,\n  message: res.message || \"\",\n  metadata: res.metadata || {},\n  data: {\n    approval_id: res.approval_id,\n    decision: res.decision,\n    reason: res.reason,\n    responded_by: res.responded_by,\n    responded_at: new Date().toISOString(),\n    portal_synced: res.portal_synced || false\n  },\n  missing_fields: res._validation.valid ? [] : res._validation.reason.split(','),\n  requires_approval: false,\n  approval_id: res.approval_id,\n  risk_level: \"low\",\n  next_action: nextAction\n};\n\nreturn [{ json: out }];\n"
+      }
+    },
+    {
+      "id": "43e24784-12fb-4949-99b6-b63bd44c7403",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -300
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "7f2a34f0-790c-48ae-a002-c34815290975",
+      "name": "Error To Core",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        250,
+        -300
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_ERROR_AUDIT"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Determine Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Request": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Respond": {
+      "main": [
+        [
+          {
+            "node": "Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Determine Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error To Core",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Determine Route": {
+      "main": [
+        [
+          {
+            "node": "Switch Action Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action Route": {
+      "main": [
+        [
+          {
+            "node": "Normalize Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Normalize Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Request": {
+      "main": [
+        [
+          {
+            "node": "Validate Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Request": {
+      "main": [
+        [
+          {
+            "node": "Policy Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Guard": {
+      "main": [
+        [
+          {
+            "node": "Switch Mode Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Mode Request": {
+      "main": [
+        [
+          {
+            "node": "TESTE - Mock Req",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MOCK - DB Table Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PORTAL - Sync Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TESTE - Mock Req": {
+      "main": [
+        [
+          {
+            "node": "Standard Output REQUEST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MOCK - DB Table Placeholder": {
+      "main": [
+        [
+          {
+            "node": "Standard Output REQUEST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PORTAL - Sync Approval": {
+      "main": [
+        [
+          {
+            "node": "Check Portal Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Portal Error": {
+      "main": [
+        [
+          {
+            "node": "DISABLED - Notify Approver",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "DISABLED - Notify Approver": {
+      "main": [
+        [
+          {
+            "node": "Standard Output REQUEST",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Response": {
+      "main": [
+        [
+          {
+            "node": "Validate Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Response": {
+      "main": [
+        [
+          {
+            "node": "Check Permission Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Permission Placeholder": {
+      "main": [
+        [
+          {
+            "node": "Switch Mode Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Mode Respond": {
+      "main": [
+        [
+          {
+            "node": "TESTE - Sim Respond",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MOCK - Sim DB Respond",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "PORTAL - Sync Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TESTE - Sim Respond": {
+      "main": [
+        [
+          {
+            "node": "Callback Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MOCK - Sim DB Respond": {
+      "main": [
+        [
+          {
+            "node": "Callback Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "PORTAL - Sync Respond": {
+      "main": [
+        [
+          {
+            "node": "Check Portal Error Respond",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Portal Error Respond": {
+      "main": [
+        [
+          {
+            "node": "Callback Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Callback Placeholder": {
+      "main": [
+        [
+          {
+            "node": "Standard Output RESPOND",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "saveDataSuccessExecution": "all",
+    "saveDataErrorExecution": "all",
+    "saveExecutionProgress": true,
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "9585ddd0-bce4-4bd5-a32c-4d089b0ddb04",
+  "tags": []
+}

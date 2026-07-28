@@ -1,0 +1,771 @@
+{
+  "updatedAt": "2026-05-20T13:20:31.749Z",
+  "createdAt": "2026-05-19T17:50:58.824Z",
+  "name": "COMPRAS - Procure to Pay Agent",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "n01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n02",
+      "name": "Webhook Compras",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "path": "vesper/compras/procure-to-pay",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n04",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n05",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        600
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "function genId(p){ return p+(Math.random().toString(36).substr(2,9)); }\nconst raw = $input.first().json;\nconst body = raw.body || raw;\nconst pl = body.payload || {};\nconst msg = body.message || pl.item_description || \"\";\nlet action = body.action || \"\";\nif(!action){\n  if(pl.supplier_replies && pl.supplier_replies.length>0) action=\"compare_quotes\";\n  else if(body.approved===true || pl.approved===true || pl.approval_id) action=\"create_purchase_order\";\n  else if(/aprovar|approved/.test(msg.toLowerCase())) action=\"request_approval\";\n  else action=\"intake\";\n}\nconst out = {\n  runtime_mode: body.runtime_mode||\"MOCK\",\n  correlation_id: body.correlation_id||genId(\"cmp_\"),\n  request_id: body.request_id||genId(\"req_\"),\n  source: body.source||\"manual\",\n  user: body.user||{id:\"\",name:\"\",role:\"\",department:\"\"},\n  message: msg,\n  action: action,\n  payload: {\n    op_id: pl.op_id||\"\",\n    item_description: pl.item_description||msg,\n    quantity: pl.quantity||null,\n    unit: pl.unit||\"\",\n    deadline: pl.deadline||\"\",\n    max_budget: pl.max_budget||0,\n    preferred_suppliers: pl.preferred_suppliers||[],\n    approved: body.approved||pl.approved||false,\n    approval_id: pl.approval_id||\"\",\n    supplier_replies: pl.supplier_replies||[]\n  },\n  metadata: body.metadata||{}\n};\nreturn [{json:out}];"
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        600
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst action = d.action || \"intake\";\nconst desc = pl.item_description || d.message || \"\";\nconst descL = desc.toLowerCase();\n\n// EX/INMETRO: detectar antes de qualquer validacao - apenas logar, nao bloquear\nconst exInmetro = /\\bex\\b|area classificada|inmetro|zona explosiva|classificada ex|zona 1|zona 2/.test(descL);\nd._ex_inmetro = exInmetro;\n\n// Acoes que nao precisam de validacao completa\nif([\"create_purchase_order\",\"request_approval\",\"compare_quotes\",\"supplier_reply\"].includes(action)){\n  d._validation = {valid:true, missing:[]};\n  d._needs_info = false;\n  return [{json:d}];\n}\n\n// Para EX/INMETRO: nao bloquear por missing unit - apenas marcar para aprovacao\nif(exInmetro){\n  d._validation = {valid:true, missing:[]};\n  d._needs_info = false;\n  return [{json:d}];\n}\n\nconst missing = [];\nif(!desc) missing.push(\"item_description\");\n\n// Unit: aceitar do payload OU do texto\nconst unitInDesc = /\\d+\\s*(un|unidade|unidades|kg|metro|m2|chapa|pecas?)/i.test(desc);\nif(!pl.unit && !unitInDesc) missing.push(\"unit\");\n\n// Quantity: aceitar do payload OU qualquer numero no texto\nconst hasNum = /\\d+/.test(desc);\nif(!pl.quantity && !hasNum) missing.push(\"quantity\");\n\nconst isChapa = /chapa|galvanizada|inox|aco/.test(descL);\nif(isChapa){\n  const hasThk = /\\d+[,.]?\\d*/.test(desc);\n  if(!hasThk) missing.push(\"espessura\");\n  const hasDim = /\\d+\\s*[xX]\\s*\\d+/.test(desc);\n  const hasQtyUnit = /\\d+\\s*(un|unidade|unidades|chapa|peca)/i.test(desc);\n  if(!hasDim && !hasQtyUnit && !pl.quantity) missing.push(\"dimensoes\");\n}\n\nd._validation = {valid:missing.length===0, missing};\nd._needs_info = missing.length > 0;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Check Needs Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "c01",
+              "leftValue": "={{ $json._needs_info }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Extract Specs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        500
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst desc = (d.payload?.item_description || d.message || \"\").toLowerCase();\nconst pl = d.payload || {};\nconst mat = {};\nmat.raw_description = desc;\n\n// Thickness\nconst thk = desc.match(/(\\d+)[,.](\\d+)/);\nmat.thickness = thk ? `${thk[1]}.${thk[2]}` : null;\n\n// Dimensions\nconst dim = desc.match(/(\\d+)\\s*[xX]\\s*(\\d+)/);\nmat.dimensions = dim ? dim[0] : null;\n\n// Quantity from payload or text\nconst qtyText = desc.match(/(\\d+)\\s*(un|unidade|unidades|chapa|pecas?|peca)/i);\nmat.quantity = pl.quantity || (qtyText ? parseInt(qtyText[1]) : null);\nmat.unit = pl.unit || (qtyText ? qtyText[2].replace(/s$/,\"\") : \"unidade\");\n\n// Material classification\nif(/galvanizada|galv/.test(desc)) { mat.material_name=\"Chapa Galvanizada\"; mat.material_category=\"chapa_metalica\"; mat.finish=\"galvanizado\"; }\nelse if(/inox/.test(desc)) { mat.material_name=\"Chapa Inox\"; mat.material_category=\"chapa_metalica\"; mat.finish=\"inox\"; }\nelse if(/chapa.*aco|aco.*chapa/.test(desc)) { mat.material_name=\"Chapa de Aco\"; mat.material_category=\"chapa_metalica\"; mat.finish=\"aco\"; }\nelse if(/chapa fina/.test(desc)) { mat.material_name=\"Chapa Fina\"; mat.material_category=\"chapa_metalica\"; mat.finish=\"\"; }\nelse { mat.material_name=desc.substring(0,50); mat.material_category=\"generico\"; mat.finish=\"\"; }\n\n// OP\nconst opM = desc.match(/\\bop[\\s_]?(\\d+)/i) || (pl.op_id||\"\").match(/(\\d+)/);\nmat.op_id = pl.op_id || (opM ? opM[0].replace(/\\s/,\"\") : \"\");\n\nmat.urgency = /urgent|urgente|atrasad/.test(desc) ? \"alta\" : \"normal\";\nmat.max_budget = pl.max_budget||0;\nmat.deadline = pl.deadline||\"\";\n\n// SKU\nconst thkCode = mat.thickness ? mat.thickness.replace(\".\",\"\") : \"X\";\nconst dimCode = mat.dimensions ? mat.dimensions.replace(/\\s/g,\"\") : \"X\";\nconst catCode = mat.material_category.toUpperCase().replace(/_/g,\"\");\nmat.material_id = `MAT-${catCode}-${thkCode}`.substring(0,30);\nmat.sku_code = `SKU-${catCode}-${thkCode}-${dimCode}`.substring(0,40);\nmat.confidence = mat.material_name && mat.thickness ? 0.90 : 0.60;\n\nd._material = mat;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Fetch Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        500
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst mat = d._material || {};\nconst mode = d.runtime_mode;\nlet suppliers = [], history = [], op = null;\nif(mode === \"PORTAL\"){\n  const baseUrl = \"http://127.0.0.1:8000\";\n  d._portal_requests = {\n    suppliers: `GET ${baseUrl}/api/compras/fornecedores?category=${mat.material_category}`,\n    history: `GET ${baseUrl}/api/compras/historico-precos?material_id=${mat.material_id}`,\n    op: mat.op_id ? `GET ${baseUrl}/api/producao/ops/${mat.op_id}` : null\n  };\n  suppliers = [{id:\"F001\",name:\"[PORTAL]\",note:\"fetch from Portal\"}];\n} else {\n  suppliers = [\n    {id:\"F001\",name:\"Fornecedor Alfa\",category:\"chapa_metalica\",active:true,avg_days:5,score:4.5,contact:\"compras@fornecedor-alfa.example\"},\n    {id:\"F002\",name:\"Fornecedor Beta\",category:\"chapa_metalica\",active:true,avg_days:7,score:4.2,contact:\"compras@fornecedor-beta.example\"},\n    {id:\"F003\",name:\"Fornecedor Gama\",category:\"chapa_metalica\",active:true,avg_days:4,score:4.7,contact:\"compras@fornecedor-gama.example\"},\n    {id:\"F004\",name:\"Fornecedor Reserva\",category:\"generico\",active:true,avg_days:10,score:3.8,contact:\"compras@fornecedor-reserva.example\"}\n  ];\n  history = [\n    {material_id:mat.material_id,date:\"2025-01\",unit_price:45.50,supplier:\"F001\"},\n    {material_id:mat.material_id,date:\"2025-02\",unit_price:46.80,supplier:\"F003\"},\n    {material_id:mat.material_id,date:\"2025-03\",unit_price:44.90,supplier:\"F002\"}\n  ];\n  if(mat.op_id) op = {id:mat.op_id,status:\"em_andamento\",deadline:mat.deadline||\"2025-06-30\"};\n}\nconst avg = history.length ? history.reduce((s,h)=>s+h.unit_price,0)/history.length : 0;\nd._suppliers = suppliers;\nd._price_history = history;\nd._avg_price = avg;\nd._kanban_op = op;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Supplier Selection",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        500
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst all = d._suppliers || [];\nconst compatible = all.filter(s => s.active && (s.category === (d._material||{}).material_category || s.category === \"generico\"));\nconst selected = compatible.sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,5);\nlet risk = \"low\";\nif(selected.length < 3){ risk=\"medium\"; d._policy_override={requires_approval:true,reason:\"Menos de 3 fornecedores disponiveis\"}; }\nd._selected_suppliers = selected;\nd._supplier_risk = risk;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n11",
+      "name": "Generate Quote Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1850,
+        500
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst mat = d._material || {};\nconst suppliers = d._selected_suppliers || [];\nconst pl = d.payload;\nconst opRef = mat.op_id ? ` - OP ${mat.op_id}` : \"\";\nconst subject = `Solicitacao de Cotacao - ${mat.material_name||\"Material\"} - Qtd: ${mat.quantity||pl.quantity||\"Ver abaixo\"}${opRef}`;\nconst body = `Prezado Fornecedor,\\n\\nSolicitamos cotacao para o item abaixo:\\n\\nDescricao: ${mat.material_name||pl.item_description}\\nEspessura: ${mat.thickness||\"A confirmar\"}\\nDimensoes: ${mat.dimensions||\"A confirmar\"}\\nQuantidade: ${mat.quantity||pl.quantity||\"A confirmar\"} ${mat.unit||pl.unit||\"unidades\"}\\nPrazo desejado: ${mat.deadline||\"A combinar\"}\\n\\nPor favor informar:\\n- Preco unitario e total\\n- Frete CIF/FOB\\n- Prazo de entrega\\n- Forma de pagamento\\n- Validade da cotacao\\n- Anexar PDF se possivel\\n\\nRef.: ${d.correlation_id} / ${d.request_id}\\n\\nAguardamos retorno.\\n\\nEquipe de Compras - Portal Demo`;\nd._quotation = {\n  quote_id: \"qt_mock_\"+(Math.random().toString(36).substr(2,8)),\n  subject: subject,\n  email_body: body,\n  suppliers_count: suppliers.length,\n  status: \"draft\",\n  created_at: new Date().toISOString(),\n  note: d.runtime_mode===\"PORTAL\" ? \"TODO: POST /api/compras/cotacoes no Portal\" : \"MOCK: email nao enviado\"\n};\nd._status = \"quote_ready\";\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2100,
+        500
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "compare_quotes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "request_approval",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create_purchase_order",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "supplier_reply",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "intake",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "request_quote",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "Process Supplier Replies",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2400,
+        300
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload;\nlet replies = pl.supplier_replies||[];\nif(replies.length===0){\n  const avg = d._avg_price||45;\n  replies = [\n    {supplier_id:\"F001\",supplier_name:\"Fornecedor Alfa\",unit_price:avg*1.02,total_price:avg*1.02*(d._material?.quantity||10),freight:150,delivery_days:5,payment_terms:\"30dd\",quote_validity:30,observations:\"\"},\n    {supplier_id:\"F002\",supplier_name:\"Fornecedor Beta\",unit_price:avg*0.98,total_price:avg*0.98*(d._material?.quantity||10),freight:200,delivery_days:7,payment_terms:\"28dd\",quote_validity:30,observations:\"Melhor preco\"},\n    {supplier_id:\"F003\",supplier_name:\"Fornecedor Gama\",unit_price:avg*1.05,total_price:avg*1.05*(d._material?.quantity||10),freight:0,delivery_days:4,payment_terms:\"30dd\",quote_validity:15,observations:\"Frete gratis\"}\n  ];\n}\nd._supplier_replies = replies;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n14",
+      "name": "Compare Quotes",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2650,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst replies = d._supplier_replies || [];\nif(replies.length === 0){\n  d._comparison = {ranking:[], recommended_supplier:\"\", note:\"Sem respostas de fornecedores para comparar\"};\n  d._status = \"waiting_suppliers\";\n  d._risk_level = d._ex_inmetro ? \"critical\" : \"low\";\n  d._requires_approval = d._ex_inmetro || false;\n  return [{json:d}];\n}\nconst qty = (d._material && d._material.quantity) || d.payload?.quantity || 1;\nconst avg = d._avg_price || 0;\n\nconst scored = replies.map(r=>{\n  const total = r.total_price || (r.unit_price * qty);\n  const priceScore = avg > 0 ? Math.max(0, 10 - ((r.unit_price - avg) / avg) * 10) : 5;\n  const timeScore = Math.max(0, 10 - (r.delivery_days || 7) / 2);\n  const score = parseFloat((priceScore * 0.6 + timeScore * 0.4).toFixed(2));\n  const vsHist = avg > 0 ? parseFloat(((r.unit_price - avg) / avg * 100).toFixed(1)) : 0;\n  return {...r, total_price: total, score, vs_history_pct: vsHist, rank: 0};\n});\nscored.sort((a,b) => b.score - a.score);\nscored.forEach((r,i) => r.rank = i+1);\nconst best = scored[0] || {};\nconst highPrice = avg > 0 && best.unit_price > avg * 1.15;\nd._comparison = {\n  ranking: scored,\n  recommended_supplier: best.supplier_name||\"\",\n  recommended_supplier_id: best.supplier_id||\"\",\n  best_price: best.unit_price||0,\n  best_total: best.total_price||0,\n  best_delivery: best.delivery_days||0,\n  avg_market_price: avg,\n  price_vs_history: best.vs_history_pct||0,\n  high_price_alert: highPrice,\n  generated_at: new Date().toISOString()\n};\nd._risk_level = d._ex_inmetro ? \"critical\" : (highPrice ? \"high\" : (d._supplier_risk||\"low\"));\nd._requires_approval = highPrice || d._ex_inmetro || (d._policy_override?.requires_approval||false);\nd._approval_reason = highPrice ? `Preco ${best.vs_history_pct}% acima da media historica` : (d._ex_inmetro ? \"Material EX/INMETRO - revisao tecnica obrigatoria\" : \"\");\nd._status = \"comparison_ready\";\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "Approval Integration",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst mode = d.runtime_mode;\nconst best = d._comparison?.ranking?.[0]||{};\nconst apprId = \"appr_compras_\"+(Math.random().toString(36).substr(2,8));\nd._approval_payload = {\n  runtime_mode: mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  approval_type: \"purchase_order\",\n  requested_by: d.user,\n  summary: `Aprovar cotacao: ${d._material?.material_name||\"item\"} - ${best.supplier_name||\"\"} - R$ ${(best.total_price||0).toFixed(2)}`,\n  details: { material: d._material||{}, comparison: d._comparison||{}, selected_supplier: best },\n  risk_level: d._risk_level||\"low\",\n  amount: best.total_price||0,\n  currency: \"BRL\"\n};\nd._approval_id = apprId;\nif(mode===\"PORTAL\"){\n  d._approval_note = \"TODO: Execute Workflow CORE - Approval Center (WORKFLOW_APPROVAL_CENTER) ou POST /webhook/vesper/core/approval/request\";\n} else {\n  d._approval_note = \"MOCK: approval simulado - aguardando aprovacao humana\";\n}\nd._status = \"approval_pending\";\nd._requires_approval = true;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n16",
+      "name": "Create PO Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2900,
+        600
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst approved = d.payload?.approved||d.payload?.approval_id;\nif(!approved){\n  d._status = \"approval_pending\";\n  d._blocked_reason = \"Pedido de compra nao pode ser criado sem aprovacao previa\";\n  return [{json:d}];\n}\nconst best = d._comparison?.ranking?.[0]||d._selected_suppliers?.[0]||{};\nconst poId = d.runtime_mode===\"PORTAL\" ? \"po_portal_pending\" : \"po_mock_\"+(Math.random().toString(36).substr(2,8));\nd._purchase_order = {\n  po_id: poId,\n  material: d._material||{},\n  supplier: best,\n  quantity: d._material?.quantity||d.payload?.quantity||1,\n  unit: d._material?.unit||\"unidade\",\n  unit_price: best.unit_price||0,\n  total_price: best.total_price||0,\n  payment_terms: best.payment_terms||\"\",\n  delivery_days: best.delivery_days||0,\n  correlation_id: d.correlation_id,\n  approval_id: d.payload?.approval_id||d._approval_id||\"\",\n  status: \"draft\",\n  note: d.runtime_mode===\"PORTAL\" ? \"TODO: POST /api/compras/pedidos (apenas rascunho)\" : \"MOCK: pedido criado como rascunho - nao enviado ao fornecedor\",\n  created_at: new Date().toISOString()\n};\nd._status = \"purchase_order_draft\";\nd._portal_synced = false;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n17",
+      "name": "Kanban Sync Placeholder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3150,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d=$input.first().json;if(d._material?.op_id){d._kanban={status:\"prepared\",op_id:d._material.op_id,note:d.runtime_mode===\"PORTAL\"?\"TODO: POST /api/kanban/cards/{id}/activities\":\"MOCK: kanban_activity_prepared=true\"};}return [{json:d}];"
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3400,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\n\n// Aplicar risco EX/INMETRO em qualquer caminho\nif(d._ex_inmetro) {\n  d._risk_level = \"critical\";\n  d._requires_approval = true;\n  if(!d._approval_reason) d._approval_reason = \"Material EX/INMETRO - revisao tecnica obrigatoria\";\n  if(d._status === \"quote_ready\") d._status = \"approval_pending\";\n}\n\nconst evtMap = {\n  intake:\"compras.intake_created\", request_quote:\"compras.quote_draft_created\",\n  compare_quotes:\"compras.comparison_ready\", request_approval:\"compras.approval_requested\",\n  create_purchase_order:\"compras.purchase_order_draft_created\"\n};\nd._audit = {\n  event_type: evtMap[d.action] || \"compras.processed\",\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  action: d.action,\n  status: d._status,\n  material: d._material || {},\n  risk_level: d._risk_level || \"low\",\n  user: d.user,\n  runtime_mode: d.runtime_mode,\n  timestamp: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/automation/audit\" : \"MOCK: audit_logged=true\"\n};\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n19",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        700
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nd._status = \"needs_info\";\nd._risk_level = \"low\";\nconst questions = [];\nconst miss = d._validation?.missing||[];\nif(miss.includes(\"item_description\")) questions.push(\"Qual item deseja comprar?\");\nif(miss.includes(\"quantity\")) questions.push(\"Qual a quantidade necessaria?\");\nif(miss.includes(\"unit\")) questions.push(\"Qual a unidade (unidade, kg, metro)?\");\nif(miss.includes(\"espessura\")) questions.push(\"Qual a espessura do material?\");\nif(miss.includes(\"dimensoes\")) questions.push(\"Quais as dimensoes (ex: 1000x2000mm)?\");\nd._needs_info_questions = questions;\nreturn [{json:d}];"
+      }
+    },
+    {
+      "id": "n20",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d=$input.first().json;d._error_note=\"TODO: vincular Error Audit Dead Letter nas Settings\";return [{json:d}];"
+      }
+    },
+    {
+      "id": "n21",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3650,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst best = d._comparison?.ranking?.[0]||null;\nconst status = d._status||(d._needs_info?\"needs_info\":\"success\");\nconst out = {\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  status: status,\n  agent: \"compras\",\n  workflow: \"COMPRAS - Procure to Pay Agent\",\n  summary: d._approval_reason||d._blocked_reason||(d._quotation?.note)||status,\n  data: {\n    purchase_request_id: d._quotation?.quote_id||\"\",\n    op_id: d._material?.op_id||\"\",\n    material: d._material||{},\n    selected_suppliers: d._selected_suppliers||[],\n    quotation: d._quotation||{},\n    supplier_replies: d._supplier_replies||[],\n    comparison: d._comparison||{},\n    approval_id: d._approval_id||null,\n    purchase_order_id: d._purchase_order?.po_id||null,\n    portal_synced: d._portal_synced||false\n  },\n  missing_fields: d._validation?.missing||[],\n  requires_approval: d._requires_approval||false,\n  approval_id: d._approval_id||null,\n  risk_level: d._risk_level||\"low\",\n  next_action: status===\"purchase_order_draft\"?\"confirm_with_supplier\":\n               status===\"approval_pending\"?\"wait_for_approval\":\n               status===\"comparison_ready\"?\"request_approval\":\n               status===\"quote_ready\"?\"send_to_suppliers\":\n               status===\"needs_info\"?\"request_more_info\":\"none\"\n};\nreturn [{json:out}];"
+      }
+    },
+    {
+      "id": "s01",
+      "name": "Sticky TESTE",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        -100
+      ],
+      "parameters": {
+        "content": "## Modo TESTE\n\nUse Manual Trigger com:\n{\"runtime_mode\":\"TESTE\",\"message\":\"Comprar chapa fina galvanizada 0.80 1000x2000 10 unidades para OP 123\"}\n\nSem chamadas reais. Sem email. Sem compra.",
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Sticky MOCK",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        150
+      ],
+      "parameters": {
+        "content": "## Modo MOCK\n\nWebhook POST /webhook/vesper/compras/procure-to-pay\nruntime_mode=MOCK.\nSimula fornecedores e cotacoes.\nData Tables: vesper_purchase_requests, vesper_quote_requests, etc",
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Sticky PORTAL",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        400
+      ],
+      "parameters": {
+        "content": "## Modo PORTAL\n\nruntime_mode=PORTAL\nBase URL: $env.VESPER_PORTAL_BASE_URL\nToken: $env.VESPER_PORTAL_API_KEY\nNao hardcode credenciais.",
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Sticky Gateway",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        600
+      ],
+      "parameters": {
+        "content": "## Gateway -> Compras\n\nGateway ID: WORKFLOW_GATEWAY_SUPERVISOR\nFuturo: Execute Workflow node no Gateway apontando para este workflow.\nOu: POST /webhook/vesper/compras/procure-to-pay",
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Sticky Approval",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        800
+      ],
+      "parameters": {
+        "content": "## Approval Center\n\nID: WORKFLOW_APPROVAL_CENTER\nEm PORTAL: Execute Workflow ou POST /webhook/vesper/core/approval/request\nEm MOCK: simular appr_compras_xxxxx",
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Sticky Endpoints",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -300,
+        1000
+      ],
+      "parameters": {
+        "content": "## Endpoints Portal\n\nGET /api/compras/materiais/search\nGET /api/compras/fornecedores\nGET /api/compras/historico-precos\nPOST /api/compras/requisicoes\nPOST /api/compras/cotacoes\nPOST /api/compras/cotacoes/{id}/emails\nPOST /api/compras/pedidos\nPOST /api/automation/audit\nPOST /api/kanban/cards/{id}/activities",
+        "width": 400,
+        "height": 300
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Compras": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Extract Specs",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extract Specs": {
+      "main": [
+        [
+          {
+            "node": "Fetch Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Context": {
+      "main": [
+        [
+          {
+            "node": "Supplier Selection",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supplier Selection": {
+      "main": [
+        [
+          {
+            "node": "Generate Quote Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Quote Draft": {
+      "main": [
+        [
+          {
+            "node": "Switch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action": {
+      "main": [
+        [
+          {
+            "node": "Process Supplier Replies",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Approval Integration",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Create PO Draft",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Process Supplier Replies",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Supplier Replies": {
+      "main": [
+        [
+          {
+            "node": "Compare Quotes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compare Quotes": {
+      "main": [
+        [
+          {
+            "node": "Approval Integration",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approval Integration": {
+      "main": [
+        [
+          {
+            "node": "Kanban Sync Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create PO Draft": {
+      "main": [
+        [
+          {
+            "node": "Kanban Sync Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Kanban Sync Placeholder": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "766ed4e7-cc5c-4b0e-85e4-2a3f6773fa1d",
+  "tags": []
+}

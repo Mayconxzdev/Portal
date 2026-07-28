@@ -1,0 +1,803 @@
+{
+  "updatedAt": "2026-05-20T17:42:13.533Z",
+  "createdAt": "2026-05-20T16:34:37.550Z",
+  "name": "AI - PORTAL VESPER - Agente de Propostas Comerciais",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "proposta-comercial",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "63f78dea-5ae4-456b-ace1-90008d05b159",
+      "name": "Receber Pedido (Webhook)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "cliente",
+              "value": "={{ $json.body.cliente ?? $json.cliente ?? \"Cliente não informado\" }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "produto",
+              "value": "={{ $json.body.produto ?? $json.produto ?? \"Produto não especificado\" }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "quantidade",
+              "value": "={{ $json.body.quantidade ?? $json.quantidade ?? 1 }}",
+              "type": "number"
+            },
+            {
+              "id": "4",
+              "name": "prazo_desejado",
+              "value": "={{ $json.body.prazo_desejado ?? $json.prazo_desejado ?? \"A definir\" }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "desconto_solicitado",
+              "value": "={{ $json.body.desconto_solicitado ?? $json.desconto_solicitado ?? 0 }}",
+              "type": "number"
+            },
+            {
+              "id": "6",
+              "name": "observacoes",
+              "value": "={{ $json.body.observacoes ?? $json.observacoes ?? \"\" }}",
+              "type": "string"
+            },
+            {
+              "id": "7",
+              "name": "tipo_pedido",
+              "value": "={{ $json.body.tipo_pedido ?? $json.tipo_pedido ?? \"orcamento\" }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1c0c4873-54a2-479e-b813-9687409eb701",
+      "name": "Normalizar Dados de Entrada",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        464,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um assistente especializado em propostas comerciais da VESPER.\n\nDADOS DO PEDIDO:\n- Cliente: {{ $json.cliente }}\n- Produto: {{ $json.produto }}\n- Quantidade: {{ $json.quantidade }}\n- Prazo desejado: {{ $json.prazo_desejado }}\n- Desconto solicitado: {{ $json.desconto_solicitado }}%\n- Observações: {{ $json.observacoes }}\n- Tipo: {{ $json.tipo_pedido }}\n\nFERRAMENTAS DISPONÍVEIS:\n1. \"Buscar Dados do Produto\" - busca preço, estoque, especificações técnicas\n2. \"Buscar Dados do Cliente\" - busca histórico, crédito, condições especiais\n3. \"Buscar Certificações\" - verifica INMETRO, EX e outras certificações\n4. \"Buscar Prazos Técnicos\" - consulta prazos reais de produção/entrega\n\nREGRAS OBRIGATÓRIAS:\n- NUNCA aplicar desconto > 10% sem marcar requer_aprovacao_desconto: true\n- NUNCA prometer prazo sem consultar \"Buscar Prazos Técnicos\" e validar\n- NUNCA afirmar certificação sem consultar \"Buscar Certificações\"\n- SEMPRE buscar dados do produto e cliente antes de gerar proposta\n- Se certificação solicitada não estiver disponível, marcar requer_validacao_certificacao: true\n- Se prazo solicitado for menor que prazo técnico, marcar requer_validacao_prazo: true\n\nANÁLISE DE RISCO:\n- risco_comercial: \"baixo\" (cliente regular, desconto ≤10%, prazo OK)\n- risco_comercial: \"medio\" (cliente novo, desconto 10-15%, prazo apertado)\n- risco_comercial: \"alto\" (desconto >15%, prazo impossível, certificação indisponível)\n\nGere uma proposta completa e estruturada seguindo o schema JSON fornecido.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um agente comercial especializado. Use TODAS as ferramentas disponíveis para buscar dados reais antes de gerar a proposta. Siga rigorosamente as regras de aprovação e validação. Seja preciso e profissional."
+        }
+      },
+      "id": "8e49a7c1-45ad-4585-be29-08fe132e0d4d",
+      "name": "Agente de Propostas Comerciais",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        944,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "29a12e24-5442-48a6-9ad1-60015efedd70",
+      "name": "OpenAI GPT-5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        688,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Buscar Dados do Produto na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "461a5cda-088c-482d-9f23-bad2482634b1",
+      "name": "Buscar Dados do Produto",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        816,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Buscar Dados do Cliente na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "7f73825b-1bb7-4ba8-a2ad-10bd4a2a1a69",
+      "name": "Buscar Dados do Cliente",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        944,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Buscar Certificações na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "dbb1befa-0c5a-477e-8b05-6c5a4b937f69",
+      "name": "Buscar Certificações",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1072,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Buscar Prazos Técnicos na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "aaaf299c-35c0-4c16-a3e5-18c8c9dfffc6",
+      "name": "Buscar Prazos Técnicos",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1200,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "tipo_resposta": "proposta",
+          "cliente": "Nome do Cliente",
+          "produto": "Nome do Produto",
+          "quantidade": 50,
+          "preco_unitario": 1500,
+          "preco_total": 75000,
+          "desconto_aplicado": 10,
+          "prazo_entrega": "45 dias",
+          "certificacoes": [
+            "INMETRO",
+            "EX"
+          ],
+          "observacoes_tecnicas": "Detalhes técnicos do produto",
+          "risco_comercial": "baixo",
+          "requer_aprovacao_desconto": false,
+          "requer_validacao_prazo": false,
+          "requer_validacao_certificacao": false,
+          "justificativa": "Análise completa da proposta"
+        }
+      },
+      "id": "6700ead8-326e-4d5e-a01b-042c58ec5bc5",
+      "name": "Parser de Proposta",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1328,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.output.requer_aprovacao_desconto }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.output.requer_validacao_prazo }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "id": "3",
+              "leftValue": "={{ $json.output.requer_validacao_certificacao }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "id": "4",
+              "leftValue": "={{ $json.output.risco_comercial }}",
+              "rightValue": "alto",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1492d2a6-7158-492e-b0ba-44dc69d5c0c7",
+      "name": "Requer Aprovação Humana?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1536,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Aprovação de Proposta Comercial - VESPER",
+        "formDescription": "=&lt;h3&gt;Proposta requer aprovação&lt;/h3&gt;\n&lt;p&gt;&lt;strong&gt;Cliente:&lt;/strong&gt; {{ $json.output.cliente }}&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Produto:&lt;/strong&gt; {{ $json.output.produto }}&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Valor Total:&lt;/strong&gt; R$ {{ $json.output.preco_total }}&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Desconto:&lt;/strong&gt; {{ $json.output.desconto_aplicado }}%&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Risco:&lt;/strong&gt; {{ $json.output.risco_comercial }}&lt;/p&gt;\n&lt;p&gt;&lt;strong&gt;Justificativa:&lt;/strong&gt; {{ $json.output.justificativa }}&lt;/p&gt;",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decisão",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Aprovar"
+                  },
+                  {
+                    "option": "Rejeitar"
+                  },
+                  {
+                    "option": "Solicitar Revisão"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Observações do Aprovador",
+              "fieldType": "textarea",
+              "placeholder": "Comentários adicionais sobre a decisão"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2ce40fc3-7898-43e1-a839-d19a9766f39a",
+      "name": "Aguardar Aprovação Humana",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1760,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "proposta",
+              "value": "={{ $(\"Agente de Propostas Comerciais\").item.json.output }}",
+              "type": "object"
+            },
+            {
+              "id": "2",
+              "name": "aprovacao",
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "3",
+              "name": "status",
+              "value": "={{ $json.decisao === \"Aprovar\" ? \"aprovada\" : ($json.decisao === \"Rejeitar\" ? \"rejeitada\" : \"revisao\") }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "timestamp_aprovacao",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "92b7e44a-c682-452f-8d13-12315c8ace1c",
+      "name": "Processar Decisão de Aprovação",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1984,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f00fd0c9-5f93-4b96-af65-f200e904d4af",
+      "name": "Unificar Propostas",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2208,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "proposta",
+              "value": "={{ $json.output }}",
+              "type": "object"
+            },
+            {
+              "id": "2",
+              "name": "status",
+              "value": "aprovada_automaticamente",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "timestamp_aprovacao",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db5c2878-4bd2-4e3b-9231-1e381e2a289a",
+      "name": "Proposta Automática (Baixo Risco)",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1984,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "d3a2a452-e1e7-4244-a9c9-87cd9d1fd593",
+      "name": "Teste Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tipo\": \"proposta_comercial\", \"cliente\": $json.proposta.cliente, \"produto\": $json.proposta.produto, \"valor\": $json.proposta.preco_total, \"status\": $json.status, \"timestamp\": $json.timestamp_aprovacao, \"usuario\": $execution.id, \"dados_completos\": $json } }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "c2605cf3-403f-449a-888b-64371ef19e64",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2432,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "success",
+              "value": true,
+              "type": "boolean"
+            },
+            {
+              "id": "2",
+              "name": "proposta_id",
+              "value": "={{ $(\"Registrar Auditoria\").item.json.auditoria_id }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "status",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "cliente",
+              "value": "={{ $(\"Unificar Propostas\").item.json.proposta.cliente }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "produto",
+              "value": "={{ $(\"Unificar Propostas\").item.json.proposta.produto }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "valor_total",
+              "value": "={{ $(\"Unificar Propostas\").item.json.proposta.preco_total }}",
+              "type": "number"
+            },
+            {
+              "id": "7",
+              "name": "prazo_entrega",
+              "value": "={{ $(\"Unificar Propostas\").item.json.proposta.prazo_entrega }}",
+              "type": "string"
+            },
+            {
+              "id": "8",
+              "name": "mensagem",
+              "value": "={{ $json.status === \"aprovada\" || $json.status === \"aprovada_automaticamente\" ? \"Proposta gerada e aprovada com sucesso\" : \"Proposta aguardando revisão\" }}",
+              "type": "string"
+            },
+            {
+              "id": "9",
+              "name": "detalhes",
+              "value": "={{ $(\"Unificar Propostas\").item.json.proposta }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b1b5d89d-ce52-49ef-b004-436f3857df10",
+      "name": "Formatar Resposta Final",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2656,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "724e098a-edea-4c26-a5d2-a5272397dd71",
+      "name": "Responder ao Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        2880,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "8c1fb273-782e-4d77-be75-a1ba2ba33261",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Receber Pedido (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Dados de Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Dados de Entrada": {
+      "main": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de Propostas Comerciais": {
+      "main": [
+        [
+          {
+            "node": "Requer Aprovação Humana?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Dados do Produto": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Dados do Cliente": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Certificações": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Prazos Técnicos": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser de Proposta": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de Propostas Comerciais",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requer Aprovação Humana?": {
+      "main": [
+        [
+          {
+            "node": "Aguardar Aprovação Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Proposta Automática (Baixo Risco)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar Aprovação Humana": {
+      "main": [
+        [
+          {
+            "node": "Processar Decisão de Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processar Decisão de Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Unificar Propostas",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Unificar Propostas": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Proposta Automática (Baixo Risco)": {
+      "main": [
+        [
+          {
+            "node": "Unificar Propostas",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Teste Manual": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Dados de Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Formatar Resposta Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Formatar Resposta Final": {
+      "main": [
+        [
+          {
+            "node": "Responder ao Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Dados de Entrada",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "1284655b-1ca5-4377-a6ff-d987bd08e138",
+  "tags": []
+}

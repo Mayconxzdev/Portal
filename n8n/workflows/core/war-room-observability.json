@@ -1,0 +1,1192 @@
+{
+  "updatedAt": "2026-05-20T11:03:32.435Z",
+  "createdAt": "2026-05-19T20:13:18.815Z",
+  "name": "WAR ROOM - Observability",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "tr01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "tr02",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        250
+      ],
+      "parameters": {
+        "path": "vesper/war-room/observability",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "tr03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "tr04",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.1,
+      "position": [
+        100,
+        550
+      ],
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cronExpression",
+              "expression": "0 0 8 * * *"
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "tr05",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        700
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "st01",
+      "name": "Sticky Note 1",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        -250
+      ],
+      "parameters": {
+        "content": "=== GUIA DE USO DO WAR ROOM ===\n\n1. Como usar TESTE:\n   Envie runtime_mode = 'TESTE'. Retorna métricas simuladas sem chamadas externas.\n\n2. Como usar MOCK:\n   Envie runtime_mode = 'MOCK'. Simula dados realistas das tabelas virtuais.\n\n3. Como usar PORTAL:\n   Envie runtime_mode = 'PORTAL'. Fará requisições HTTPS para as APIs do Vesper.\n\n4. Endpoints futuros do Portal:\n   GET /api/ia/workflows/status\n   GET /api/auditoria/logs\n   GET /api/automation/dead-letters\n   GET /api/automation/approvals\n   GET /api/ia/logs",
+        "width": 400,
+        "height": 300
+      }
+    },
+    {
+      "id": "st02",
+      "name": "Sticky Note 2",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        550,
+        -250
+      ],
+      "parameters": {
+        "content": "=== INTEGRAÇÕES E SUPORTE ===\n\n5. Como o Portal chama este workflow:\n   Via Webhook POST /vesper/war-room/observability.\n\n6. Como ler Approvals/Errors/Audit:\n   Consolida payloads de dead letters, aprovações pendentes e logs.\n\n7. Link com Error Audit:\n   Se houver falha interna, dispara POST /webhook/vesper/core/error-audit.\n\n8. Resumo Diário Automático:\n   Pode ser agendado via Schedule Trigger e executa a ação 'daily_summary'.",
+        "width": 400,
+        "height": 300
+      }
+    },
+    {
+      "id": "n01",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        250
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst d = raw.body || raw.query || raw;\nd.runtime_mode = (d.runtime_mode || \"MOCK\").toUpperCase();\nd.correlation_id = d.correlation_id || (\"WRM-\" + Date.now());\nd.request_id = d.request_id || (\"REQ-\" + Math.random().toString(36).substr(2,8).toUpperCase());\nd.source = d.source || \"manual\";\nd.user = d.user || { id: \"\", name: \"\", role: \"\", department: \"\" };\nd.payload = d.payload || {};\nd.metadata = d.metadata || {};\nconst msg = (d.message || \"\").toLowerCase();\nconst action = d.action || \"\";\nif (!action) {\n  if (/erro|falha|dead letter|deadletter/.test(msg)) {\n    if (/dead/.test(msg)) {\n      d.action = \"dead_letters_summary\";\n    } else {\n      d.action = \"errors_summary\";\n    }\n  } else if (/aprov/.test(msg)) {\n    d.action = \"approvals_summary\";\n  } else if (/custo|credito|crédito|token|preco|preço/.test(msg)) {\n    d.action = \"cost_summary\";\n  } else if (/resumo|daily/.test(msg)) {\n    d.action = \"daily_summary\";\n  } else if (/status|agente|workflow/.test(msg)) {\n    d.action = \"agent_status\";\n  } else if (/snapshot|snap/.test(msg)) {\n    d.action = \"snapshot\";\n  } else if (/alerta|critico|crítico/.test(msg)) {\n    d.action = \"critical_alerts\";\n  } else if (/auditoria|eventos/.test(msg)) {\n    d.action = \"audit_summary\";\n  } else {\n    d.action = \"health_check\";\n  }\n}\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n02",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        550,
+        250
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst action = d.action;\nconst missing = [];\nif (!action) {\n  missing.push(\"action\");\n}\nif (!pl.date_from) {\n  pl.date_from = new Date(Date.now() - 86400000).toISOString();\n}\nif (!pl.date_to) {\n  pl.date_to = new Date().toISOString();\n}\nd.payload = pl;\nd._validation = {\n  valid: missing.length === 0,\n  missing: missing\n};\nd._needs_info = missing.length > 0;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Check Needs Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        750,
+        250
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._needs_info }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        }
+      }
+    },
+    {
+      "id": "n04",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        950,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd.status = \"needs_info\";\nd.summary = \"Acao nao informada ou incapaz de inferir. Por favor, defina o campo action.\";\nd.risk_level = \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Branch Mode",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        950,
+        300
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json.runtime_mode }}",
+              "rightValue": "PORTAL",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        }
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Mock Metrics Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1200,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd.portal_synced = false;\nd._workflows = [\n  { id: \"WORKFLOW_ERROR_AUDIT\", name: \"CORE - Error Audit Dead Letter\", active: true, success_rate: 99.5, executions_total: 450, executions_failed: 2, errors_last_24h: 0 },\n  { id: \"WORKFLOW_APPROVAL_CENTER\", name: \"CORE - Approval Center\", active: true, success_rate: 98.0, executions_total: 210, executions_failed: 4, errors_last_24h: 1 },\n  { id: \"WORKFLOW_GATEWAY_SUPERVISOR\", name: \"CORE - Gateway Supervisor\", active: true, success_rate: 97.5, executions_total: 1250, executions_failed: 31, errors_last_24h: 5 },\n  { id: \"WORKFLOW_PURCHASES_AGENT\", name: \"COMPRAS - Procure to Pay Agent\", active: true, success_rate: 94.0, executions_total: 85, executions_failed: 5, errors_last_24h: 2 },\n  { id: \"WORKFLOW_COMMERCIAL_AGENT\", name: \"COMERCIAL - Quote to Cash Agent\", active: true, success_rate: 92.5, executions_total: 120, executions_failed: 9, errors_last_24h: 4 },\n  { id: \"WORKFLOW_PRODUCTION_AGENT\", name: \"PRODUCAO - Kanban OP Agent\", active: true, success_rate: 88.0, executions_total: 150, executions_failed: 18, errors_last_24h: 12 },\n  { id: \"WORKFLOW_INTERNAL_ASSISTANT\", name: \"INTERNO - Portal Assistant\", active: true, success_rate: 96.0, executions_total: 340, executions_failed: 13, errors_last_24h: 3 },\n  { id: \"WORKFLOW_KNOWLEDGE_AGENT\", name: \"KNOWLEDGE - RAG Auditoria\", active: true, success_rate: 95.5, executions_total: 520, executions_failed: 23, errors_last_24h: 8 },\n  { id: \"war_room_obs_id\", name: \"WAR ROOM - Observability\", active: true, success_rate: 100.0, executions_total: 95, executions_failed: 0, errors_last_24h: 0 }\n];\nd._dead_letters = [\n  { id: \"dl_001\", workflow_id: \"WORKFLOW_PRODUCTION_AGENT\", workflow_name: \"PRODUCAO - Kanban OP Agent\", error_message: \"Falta de chapa galvanizada no estoque\", severity: \"high\", status: \"waiting_review\", created_at: new Date(Date.now() - 7200000).toISOString() },\n  { id: \"dl_002\", workflow_id: \"WORKFLOW_COMMERCIAL_AGENT\", workflow_name: \"COMERCIAL - Quote to Cash Agent\", error_message: \"Erro de integracao com gateway de pagamento\", severity: \"medium\", status: \"retry_scheduled\", created_at: new Date(Date.now() - 14400000).toISOString() },\n  { id: \"dl_003\", workflow_id: \"WORKFLOW_PURCHASES_AGENT\", workflow_name: \"COMPRAS - Procure to Pay Agent\", error_message: \"CNPJ do fornecedor invalido\", severity: \"low\", status: \"dead_letter\", created_at: new Date(Date.now() - 43200000).toISOString() },\n  { id: \"dl_004\", workflow_id: \"WORKFLOW_PRODUCTION_AGENT\", workflow_name: \"PRODUCAO - Kanban OP Agent\", error_message: \"Erro critico: credencial vencida\", severity: \"critical\", status: \"waiting_review\", created_at: new Date(Date.now() - 3600000).toISOString() }\n];\nd._approvals = [\n  { id: \"appr_001\", type: \"purchase_order\", title: \"Aprovar compra de insumos de solda\", severity: \"high\", status: \"pending\", value: 12500, created_at: new Date().toISOString() },\n  { id: \"appr_002\", type: \"ex_area_validation\", title: \"Validacao de seguranca EX/INMETRO para exaustor axial\", severity: \"critical\", status: \"pending\", created_at: new Date(Date.now() - 1800000).toISOString() },\n  { id: \"appr_003\", type: \"it_access\", title: \"Solicitacao de acesso ao painel de controle n8n\", severity: \"medium\", status: \"pending\", created_at: new Date(Date.now() - 7200000).toISOString() }\n];\nd._costs = {\n  estimated_ai_cost_today: 18.77,\n  estimated_ai_cost_month: 245.50,\n  tokens_input: 1250000,\n  tokens_output: 380000,\n  cost_by_agent: [\n    { agent: \"knowledge\", cost: 6.40 },\n    { agent: \"comercial\", cost: 4.80 },\n    { agent: \"compras\", cost: 3.20 },\n    { agent: \"producao\", cost: 2.10 },\n    { agent: \"interno\", cost: 1.50 },\n    { agent: \"core\", cost: 0.62 },\n    { agent: \"war_room\", cost: 0.15 }\n  ],\n  highest_cost_workflow: \"KNOWLEDGE - RAG Auditoria\"\n};\nd._audit_logs = [\n  { event_type: \"ia.gateway_routed\", timestamp: new Date(Date.now() - 10000).toISOString(), agent: \"core\", message: \"Gateway Supervisor roteou consulta para Knowledge\" },\n  { event_type: \"knowledge.sources_found\", timestamp: new Date(Date.now() - 9000).toISOString(), agent: \"knowledge\", message: \"Fontes encontradas para Norma NR-10\" },\n  { event_type: \"producao.op_analyzed\", timestamp: new Date(Date.now() - 50000).toISOString(), agent: \"producao\", message: \"OP #2026-98 analisada. Risco alto por atraso de materia-prima\" },\n  { event_type: \"approval.requested\", timestamp: new Date(Date.now() - 1800000).toISOString(), agent: \"core\", message: \"Aprovacao pendente para area classificada EX\" }\n];\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Get Workflows Status",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1200,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/ia/workflows/status",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "retryOnFail": true,
+          "maxRedirects": 21,
+          "retryAttempts": 3,
+          "retryDelayBetweenAttempts": 3000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "n08",
+      "name": "Get Audit Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1400,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/auditoria/logs",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "retryOnFail": true,
+          "maxRedirects": 21,
+          "retryAttempts": 3,
+          "retryDelayBetweenAttempts": 3000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "n09",
+      "name": "Get Dead Letters",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1600,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/automation/dead-letters",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "retryOnFail": true,
+          "maxRedirects": 21,
+          "retryAttempts": 3,
+          "retryDelayBetweenAttempts": 3000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "n10",
+      "name": "Get Pending Approvals",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        1800,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/automation/approvals?status=pending",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "retryOnFail": true,
+          "maxRedirects": 21,
+          "retryAttempts": 3,
+          "retryDelayBetweenAttempts": 3000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "n11",
+      "name": "Get Agent Logs",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        2000,
+        400
+      ],
+      "parameters": {
+        "method": "GET",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/ia/logs",
+        "authentication": "none",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "options": {
+          "retryOnFail": true,
+          "maxRedirects": 21,
+          "retryAttempts": 3,
+          "retryDelayBetweenAttempts": 3000
+        }
+      },
+      "onError": "continueRegularOutput"
+    },
+    {
+      "id": "n12",
+      "name": "Aggregate Portal Data",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        400
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nlet portal_synced = true;\nlet has_error = false;\nlet w_status = [];\ntry { w_status = $(\"Get Workflows Status\").all().map(i => i.json); } catch(e) { has_error = true; }\nlet audit = [];\ntry { audit = $(\"Get Audit Logs\").all().map(i => i.json); } catch(e) { has_error = true; }\nlet dead = [];\ntry { dead = $(\"Get Dead Letters\").all().map(i => i.json); } catch(e) { has_error = true; }\nlet appr = [];\ntry { appr = $(\"Get Pending Approvals\").all().map(i => i.json); } catch(e) { has_error = true; }\nlet ia_logs = [];\ntry { ia_logs = $(\"Get Agent Logs\").all().map(i => i.json); } catch(e) { has_error = true; }\nif (has_error || !w_status || w_status.length === 0 || (w_status[0] && w_status[0].error)) {\n  portal_synced = false;\n}\nd.portal_synced = portal_synced;\nd._workflows = portal_synced ? (w_status[0]?.data || w_status) : [];\nd._audit_logs = portal_synced ? (audit[0]?.data || audit) : [];\nd._dead_letters = portal_synced ? (dead[0]?.data || dead) : [];\nd._approvals = portal_synced ? (appr[0]?.data || appr) : [];\nd._agent_logs = portal_synced ? (ia_logs[0]?.data || ia_logs) : [];\nd._costs = {\n  estimated_ai_cost_today: 18.77,\n  estimated_ai_cost_month: 245.50,\n  tokens_input: 1250000,\n  tokens_output: 380000,\n  cost_by_agent: [\n    { agent: \"knowledge\", cost: 6.40 },\n    { agent: \"comercial\", cost: 4.80 },\n    { agent: \"compras\", cost: 3.20 },\n    { agent: \"producao\", cost: 2.10 },\n    { agent: \"interno\", cost: 1.50 },\n    { agent: \"core\", cost: 0.62 },\n    { agent: \"war_room\", cost: 0.15 }\n  ],\n  highest_cost_workflow: \"KNOWLEDGE - RAG Auditoria\"\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "Switch Action Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2500,
+        300
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "health_check",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "daily_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "errors_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "approvals_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "dead_letters_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "agent_status",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "cost_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "audit_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "critical_alerts",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "snapshot",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      }
+    },
+    {
+      "id": "n14",
+      "name": "Health Check Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        50
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst wfs = d._workflows || [];\nconst dls = d._dead_letters || [];\nconst appr = d._approvals || [];\nlet total_execs = 0;\nlet total_failed = 0;\nlet core_failed = false;\nfor (const w of wfs) {\n  total_execs += w.executions_total || 0;\n  total_failed += w.executions_failed || 0;\n  if (w.name && w.name.startsWith(\"CORE -\") && (w.executions_failed > 0 || w.success_rate < 95)) {\n    core_failed = true;\n  }\n}\nconst success_rate = total_execs > 0 ? parseFloat(((total_execs - total_failed) / total_execs * 100).toFixed(2)) : 100;\nconst critical_dead = dls.filter(dl => dl.severity === \"critical\" && dl.status === \"waiting_review\").length;\nconst critical_appr = appr.filter(a => a.severity === \"critical\" && a.status === \"pending\").length;\nlet overall = \"healthy\";\nif (success_rate < 80 || core_failed || critical_dead > 0 || !d.portal_synced) {\n  overall = \"critical\";\n} else if (success_rate < 95 || dls.length > 2 || critical_appr > 0) {\n  overall = \"degraded\";\n}\nconst recs = [];\nif (overall === \"critical\") {\n  recs.push(\"Atenção Imediata: Corrigir falhas críticas nos agentes principais.\");\n  if (core_failed) recs.push(\"Revisar logs do CORE - Gateway Supervisor ou Approval Center.\");\n  if (critical_dead > 0) recs.push(\"Revisar Dead Letters de severidade crítica.\");\n  if (!d.portal_synced) recs.push(\"Restabelecer conexão com a API do Portal Vesper.\");\n} else if (overall === \"degraded\") {\n  recs.push(\"Monitorar: Taxa de sucesso geral abaixo de 95% ou acúmulo de dead letters.\");\n  if (critical_appr > 0) recs.push(\"Aprovar validações pendentes penduradas.\");\n} else {\n  recs.push(\"Todos os sistemas estão operando dentro dos parâmetros normais.\");\n}\nd.status = \"success\";\nd.data = {\n  health: {\n    overall_status: overall,\n    overall_success_rate: success_rate,\n    total_executions: total_execs,\n    total_failed: total_failed,\n    portal_synced: d.portal_synced,\n    recommends: recs\n  }\n};\nd.risk_level = overall === \"critical\" ? \"critical\" : (overall === \"degraded\" ? \"high\" : \"low\");\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "Daily Summary Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        150
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst wfs = d._workflows || [];\nconst dls = d._dead_letters || [];\nconst appr = d._approvals || [];\nconst costs = d._costs || {};\nconst active_wfs = wfs.filter(w => w.active || w.status === \"active\" || true).length;\nconst total_dl = dls.length;\nconst pending_appr = appr.length;\nlet summary_text = \"Resumo diário do Portal Vesper:\\n\" +\n  \"- Status Operacional: \" + (d.portal_synced ? \"Sincronizado\" : \"Mock/Portal Offline\") + \"\\n\" +\n  \"- Workflows Ativos: \" + active_wfs + \"\\n\" +\n  \"- Dead Letters em aberto: \" + total_dl + \"\\n\" +\n  \"- Aprovações pendentes: \" + pending_appr + \"\\n\" +\n  \"- Custo IA estimado hoje: USD \" + (costs.estimated_ai_cost_today || 0) + \"\\n\\n\" +\n  \"Recomendações:\\n\";\nif (total_dl > 0) {\n  summary_text += \"- Resolver as \" + total_dl + \" Dead Letters pendentes.\\n\";\n}\nif (pending_appr > 0) {\n  summary_text += \"- Há \" + pending_appr + \" aprovações aguardando ação no Approval Center.\\n\";\n}\nif (total_dl === 0 && pending_appr === 0) {\n  summary_text += \"- Nenhuma ação crítica pendente de atenção.\\n\";\n}\nd.status = \"daily_summary_ready\";\nd.summary = summary_text;\nd.data = {\n  portal_synced: d.portal_synced,\n  daily_summary_text: summary_text\n};\nd.risk_level = \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n16",
+      "name": "Errors Summary Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        250
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst wfs = d._workflows || [];\nconst dls = d._dead_letters || [];\nconst error_wfs = wfs.filter(w => w.executions_failed > 0);\nconst total_errors = error_wfs.reduce((acc, curr) => acc + curr.executions_failed, 0);\nconst by_severity = { critical: 0, high: 0, medium: 0, low: 0 };\nfor (const dl of dls) {\n  if (dl.severity in by_severity) {\n    by_severity[dl.severity]++;\n  }\n}\nd.status = \"success\";\nd.data = {\n  errors: {\n    total_errors: total_errors,\n    by_severity: by_severity,\n    affected_workflows: error_wfs.map(w => ({ name: w.name, failed: w.executions_failed })),\n    last_error_at: new Date().toISOString()\n  }\n};\nd.risk_level = by_severity.critical > 0 ? \"critical\" : (by_severity.high > 0 ? \"high\" : \"medium\");\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n17",
+      "name": "Approvals Summary Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        350
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst appr = d._approvals || [];\nconst pending = appr.filter(a => a.status === \"pending\").length;\nconst critical_pending = appr.filter(a => a.status === \"pending\" && a.severity === \"critical\").length;\nconst by_type = { purchase_order: 0, ex_area_validation: 0, it_access: 0, proposal_send: 0, critical_kanban_move: 0 };\nfor (const a of appr) {\n  if (a.type in by_type) {\n    by_type[a.type]++;\n  }\n}\nd.status = critical_pending > 0 ? \"alerts_found\" : \"success\";\nd.data = {\n  approvals: {\n    pending: pending,\n    critical_pending: critical_pending,\n    by_type: by_type,\n    approved_today: 5,\n    rejected_today: 1\n  }\n};\nd.next_action = critical_pending > 0 ? \"review_critical_approvals\" : \"\";\nd.risk_level = critical_pending > 0 ? \"critical\" : (pending > 0 ? \"high\" : \"low\");\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Dead Letters Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        450
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst dls = d._dead_letters || [];\nconst open = dls.filter(dl => dl.status === \"waiting_review\").length;\nconst retry = dls.filter(dl => dl.status === \"retry_scheduled\").length;\nconst critical = dls.filter(dl => dl.severity === \"critical\" && dl.status === \"waiting_review\").length;\nconst recs = [];\nif (critical > 0) recs.push(\"Revisar erro crítico repetitivo no Portal ou credenciais.\");\nif (open > 0) recs.push(\"Realizar auditoria manual de payloads pendentes.\");\nd.status = \"success\";\nd.data = {\n  dead_letters: {\n    open_dead_letters: open,\n    retry_pending: retry,\n    critical_dead_letters: critical,\n    recommendations: recs\n  }\n};\nd.risk_level = critical > 0 ? \"critical\" : (open > 0 ? \"high\" : \"medium\");\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n19",
+      "name": "Agent Status Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        550
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst wfs = d._workflows || [];\nconst agents_list = [\n  { agent: \"core\", workflows: [\"CORE - Error Audit Dead Letter\", \"CORE - Approval Center\", \"CORE - Gateway Supervisor\"] },\n  { agent: \"compras\", workflows: [\"COMPRAS - Procure to Pay Agent\"] },\n  { agent: \"comercial\", workflows: [\"COMERCIAL - Quote to Cash Agent\"] },\n  { agent: \"producao\", workflows: [\"PRODUCAO - Kanban OP Agent\"] },\n  { agent: \"interno\", workflows: [\"INTERNO - Portal Assistant\"] },\n  { agent: \"knowledge\", workflows: [\"KNOWLEDGE - RAG Auditoria\"] },\n  { agent: \"war_room\", workflows: [\"WAR ROOM - Observability\"] }\n];\nconst consolidated = agents_list.map(a => {\n  let total_runs = 0;\n  let total_fails = 0;\n  let active = true;\n  for (const name of a.workflows) {\n    const wf = wfs.find(w => w.name === name);\n    if (wf) {\n      total_runs += wf.executions_total || 0;\n      total_fails += wf.executions_failed || 0;\n      if (!wf.active) active = false;\n    }\n  }\n  const rate = total_runs > 0 ? parseFloat(((total_runs - total_fails) / total_runs * 100).toFixed(2)) : 100;\n  return {\n    agent: a.agent,\n    status: active ? (rate >= 95 ? \"healthy\" : (rate >= 80 ? \"degraded\" : \"critical\")) : \"inactive\",\n    success_rate: rate,\n    last_seen: new Date().toISOString()\n  };\n});\nd.status = \"success\";\nd.data = {\n  agents: consolidated\n};\nd.risk_level = consolidated.some(a => a.status === \"critical\") ? \"critical\" : \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n20",
+      "name": "Cost Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        650
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst costs = d._costs || {};\nd.status = \"success\";\nd.data = {\n  costs: costs\n};\nd.risk_level = costs.estimated_ai_cost_today > 15 ? \"medium\" : \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n21",
+      "name": "Audit Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        750
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst logs = d._audit_logs || [];\nd.status = \"success\";\nd.data = {\n  audit: {\n    timeline: logs,\n    total_events: logs.length\n  }\n};\nd.risk_level = \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n22",
+      "name": "Alerts Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        850
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst wfs = d._workflows || [];\nconst dls = d._dead_letters || [];\nconst appr = d._approvals || [];\nconst alerts = [];\nif (!d.portal_synced) {\n  alerts.push({\n    alert_id: \"alt_portal_down\",\n    severity: \"critical\",\n    title: \"Portal API Indisponivel\",\n    message: \"Nao foi possivel sincronizar dados com o Portal Vesper.\",\n    agent: \"war_room\",\n    created_at: new Date().toISOString(),\n    next_action: \"check_portal_network\"\n  });\n}\nfor (const w of wfs) {\n  if (w.name.startsWith(\"CORE -\") && w.executions_failed > 0) {\n    alerts.push({\n      alert_id: \"alt_core_fail_\" + w.id,\n      severity: \"critical\",\n      title: \"Falha em Workflow Core\",\n      message: \"O workflow \" + w.name + \" registrou falhas recentes.\",\n      agent: \"core\",\n      workflow: w.name,\n      created_at: new Date().toISOString(),\n      next_action: \"audit_core_logs\"\n    });\n  }\n}\nfor (const dl of dls) {\n  if (dl.severity === \"critical\") {\n    alerts.push({\n      alert_id: \"alt_dl_\" + dl.id,\n      severity: \"critical\",\n      title: \"Dead Letter Critica\",\n      message: \"Dead letter critica aberta: \" + dl.error_message,\n      agent: dl.workflow_name.split(\" \")[0].toLowerCase(),\n      workflow: dl.workflow_name,\n      created_at: dl.created_at,\n      next_action: \"manual_review\"\n    });\n  }\n}\nfor (const a of appr) {\n  if (a.severity === \"critical\" && a.status === \"pending\") {\n    alerts.push({\n      alert_id: \"alt_appr_\" + a.id,\n      severity: \"critical\",\n      title: \"Aprovacao Critica Pendente\",\n      message: \"Validacao critica pendente: \" + a.title,\n      agent: \"core\",\n      created_at: a.created_at,\n      next_action: \"review_critical_approvals\"\n    });\n  }\n}\nd.status = alerts.length > 0 ? \"alerts_found\" : \"no_alerts\";\nd.data = {\n  alerts: alerts\n};\nd.risk_level = alerts.some(a => a.severity === \"critical\") ? \"critical\" : \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n23",
+      "name": "Snapshot Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        950
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst wfs = d._workflows || [];\nconst dls = d._dead_letters || [];\nconst appr = d._approvals || [];\nconst costs = d._costs || {};\nconst snapshot_id = \"snap_\" + Math.random().toString(36).substr(2,9).toUpperCase();\nd.status = \"snapshot_ready\";\nd.data = {\n  snapshot_id: snapshot_id,\n  timestamp: new Date().toISOString(),\n  overall_status: d._workflows ? \"healthy\" : \"offline\",\n  workflows: wfs,\n  dead_letters: dls,\n  approvals: appr,\n  costs: costs,\n  portal_synced: d.portal_synced\n};\nd.risk_level = \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n24",
+      "name": "Default Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        1050
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd.status = \"failed\";\nd.summary = \"Acao desconhecida ou nao informada.\";\nd.risk_level = \"low\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n25",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nreturn [{\n  json: {\n    status: \"failed\",\n    correlation_id: raw.correlation_id || \"ERR-WAR-ROOM\",\n    request_id: raw.request_id || \"ERR-REQ\",\n    error: raw.error || { message: \"Internal Unknown Error\" },\n    next_action: \"escalate_to_human\",\n    risk_level: \"high\"\n  }\n}];"
+      }
+    },
+    {
+      "id": "n26",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3100,
+        450
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd.audit_logged = true;\nd.timestamp = new Date().toISOString();\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n27",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3350,
+        300
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  status: d.status || \"success\",\n  agent: \"war_room\",\n  workflow: \"WAR ROOM - Observability\",\n  summary: d.summary || \"Observability metrics gathered and consolidated.\",\n  data: {\n    health: d.data?.health || {},\n    agents: d.data?.agents || [],\n    workflows: d.data?.workflows || [],\n    errors: d.data?.errors || {},\n    dead_letters: d.data?.dead_letters || {},\n    approvals: d.data?.approvals || {},\n    costs: d.data?.costs || {},\n    audit: d.data?.audit || {},\n    alerts: d.data?.alerts || [],\n    recommendations: d.data?.health?.recommends || d.data?.dead_letters?.recommendations || [],\n    portal_synced: d.portal_synced || false,\n    snapshot_id: d.data?.snapshot_id || null\n  },\n  missing_fields: d._validation?.missing || [],\n  requires_approval: d._requires_approval || false,\n  approval_id: d.approval_id || null,\n  risk_level: d.risk_level || \"low\",\n  next_action: d.next_action || \"\"\n};\nreturn [{json: out}];"
+      }
+    },
+    {
+      "id": "n28",
+      "name": "DISABLED - Send Daily War Room Summary",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        3600,
+        300
+      ],
+      "parameters": {
+        "fromEmail": "observability@portal.example",
+        "toEmail": "admin@portal.example",
+        "subject": "[Daily War Room Summary] Status: {{$json.data.health.overall_status}}",
+        "html": "={{$json.summary}}"
+      },
+      "disabled": true
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Branch Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branch Mode": {
+      "main": [
+        [
+          {
+            "node": "Get Workflows Status",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mock Metrics Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Metrics Data": {
+      "main": [
+        [
+          {
+            "node": "Switch Action Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Workflows Status": {
+      "main": [
+        [
+          {
+            "node": "Get Audit Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Audit Logs": {
+      "main": [
+        [
+          {
+            "node": "Get Dead Letters",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Dead Letters": {
+      "main": [
+        [
+          {
+            "node": "Get Pending Approvals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Pending Approvals": {
+      "main": [
+        [
+          {
+            "node": "Get Agent Logs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Agent Logs": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Portal Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aggregate Portal Data": {
+      "main": [
+        [
+          {
+            "node": "Switch Action Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action Route": {
+      "main": [
+        [
+          {
+            "node": "Health Check Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Daily Summary Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Errors Summary Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Approvals Summary Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Dead Letters Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Agent Status Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Cost Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Alerts Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Snapshot Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Default Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Health Check Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Summary Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Errors Summary Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Approvals Summary Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Dead Letters Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent Status Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cost Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Alerts Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Snapshot Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Standard Output": {
+      "main": []
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "c93d8abe-d80b-4e6e-8544-2ae75db85b3f",
+  "tags": []
+}

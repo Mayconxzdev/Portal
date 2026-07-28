@@ -1,0 +1,744 @@
+{
+  "updatedAt": "2026-05-20T17:42:13.297Z",
+  "createdAt": "2026-05-20T16:34:28.364Z",
+  "name": "AI - PORTAL VESPER - Agente de Arquivos NAS e Conhecimento",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Bem-vindo ao Portal Vesper! 🗂️\n\nSou seu assistente para encontrar arquivos, documentos, PDFs, propostas, certificados, manuais, normas e documentos de clientes, fornecedores e OPs no servidor.\n\nComo posso ajudar você hoje?",
+        "options": {
+          "allowFileUploads": false,
+          "loadPreviousSession": "memory",
+          "showWelcomeScreen": true,
+          "getStarted": "Iniciar Busca",
+          "subtitle": "Sistema de Busca Inteligente de Arquivos e Conhecimento",
+          "title": "Portal Vesper 🗂️",
+          "responseMode": "streaming"
+        }
+      },
+      "id": "db4a5490-6576-48ea-9d34-a0e6f96e3f73",
+      "name": "Portal Vesper Chat",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "id": "0a6220f1-e95b-4cc4-b5ea-3f2bfdcbbcd0",
+      "name": "Memória do Chat",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        320,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Portal Vesper Chat').item.json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é o Agente Vesper, assistente especializado em busca de arquivos e documentos no servidor/NAS da empresa.\n\nREGRAS CRÍTICAS:\n1. NUNCA invente informações sem fonte verificada\n2. SEMPRE use a ferramenta \"Busca Arquivos NAS\" para encontrar arquivos\n3. SEMPRE use a ferramenta \"Base de Conhecimento\" para buscar conteúdo de documentos\n4. SEMPRE use a ferramenta \"Validação de Permissões\" antes de fornecer conteúdo de arquivos restritos\n5. NUNCA afirme certificações (INMETRO, ISO, etc.) sem documento comprobatório\n6. SEMPRE cite a fonte completa (caminho do arquivo) ao fornecer informações\n7. Se não encontrar arquivo, diga claramente \"Não encontrei\" - não invente\n8. Se acesso negado, explique e oriente o usuário a solicitar permissão\n\nFERRAMENTAS DISPONÍVEIS:\n- \"Busca Arquivos NAS\": Encontra arquivos por nome, tipo, cliente, fornecedor, OP\n- \"Base de Conhecimento\": Busca conteúdo dentro dos documentos indexados\n- \"Validação de Permissões\": Verifica se usuário pode acessar arquivo restrito\n\nFORMATO DE RESPOSTA:\n- Sempre estruture a resposta com: resposta clara, lista de arquivos encontrados, fontes completas\n- Indique nível de confiança: alta (documento encontrado), média (informação parcial), baixa (não encontrado)\n- Marque se há certificação oficial (temCertificacao: true/false)\n- Marque se há restrição de acesso (temRestricao: true/false)\n\nEXEMPLOS:\nUsuário: \"Tem certificado INMETRO?\"\nVocê: Busca com \"Busca Arquivos NAS\" → Valida permissões → Responde com fonte\n\nUsuário: \"Proposta do cliente ABC\"\nVocê: Busca arquivo → Valida permissões → Se restrito, informa restrição\n\nSeja preciso, cite fontes e nunca invente informações.",
+          "maxIterations": 15,
+          "returnIntermediateSteps": true
+        }
+      },
+      "id": "205acdcf-444d-48db-8e31-5f0f17864b8d",
+      "name": "Agente Vesper",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        960,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "maxTokens": 2000,
+          "temperature": 0.3
+        }
+      },
+      "id": "3407b47c-0b70-4c47-ace7-25de8a96d12e",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $('Portal Vesper Chat').item.json.sessionId }}",
+        "contextWindowLength": 10
+      },
+      "id": "5a6227d4-a6f0-45e4-b8f9-0c6ef6c2b7aa",
+      "name": "Memória do Agente",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        720,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "retrieve-as-tool",
+        "toolDescription": "Busca documentos, arquivos, PDFs, propostas, certificados, manuais, normas, arquivos de clientes, fornecedores e OPs no servidor/NAS. Use esta ferramenta SEMPRE que o usuário perguntar sobre documentos, arquivos ou informações armazenadas. Retorna o conteúdo dos documentos encontrados com metadados de fonte.",
+        "memoryKey": {
+          "__rl": true,
+          "mode": "list",
+          "value": "vesper_knowledge_base"
+        },
+        "topK": 5
+      },
+      "id": "9b5370a7-a312-40f7-905a-87ccfbcd914b",
+      "name": "Base de Conhecimento",
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreInMemory",
+      "typeVersion": 1.3,
+      "position": [
+        848,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "dimensions": 1536
+        },
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        }
+      },
+      "id": "aa24af5c-1547-4e39-89fd-6ce2cf978253",
+      "name": "Embeddings OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOpenAi",
+      "typeVersion": 1.2,
+      "position": [
+        928,
+        736
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Busca arquivos no servidor/NAS por nome, tipo, cliente, fornecedor, OP ou palavra-chave. Retorna lista de arquivos encontrados com caminho completo, tipo, tamanho, data de modificação e permissões de acesso. Use quando o usuário pedir para encontrar arquivos específicos.",
+        "jsCode": "// Simulação de busca no NAS (substituir por integração real)\nconst query = $input.item.json.query || '';\n\n// Simular busca de arquivos\nconst arquivos = [\n  {\n    nome: 'Certificado_INMETRO_2024.pdf',\n    caminho: '/nas/certificados/inmetro/Certificado_INMETRO_2024.pdf',\n    tipo: 'PDF',\n    tamanho: '2.5 MB',\n    dataModificacao: '2024-01-15',\n    categoria: 'certificado',\n    permissoes: 'publico',\n    cliente: null,\n    fornecedor: null,\n    op: null\n  },\n  {\n    nome: 'Proposta_Cliente_ABC_2024.pdf',\n    caminho: '/nas/propostas/clientes/Proposta_Cliente_ABC_2024.pdf',\n    tipo: 'PDF',\n    tamanho: '1.8 MB',\n    dataModificacao: '2024-02-20',\n    categoria: 'proposta',\n    permissoes: 'restrito',\n    cliente: 'ABC Ltda',\n    fornecedor: null,\n    op: 'OP-2024-001'\n  },\n  {\n    nome: 'Manual_Operacao_Equipamento_X.pdf',\n    caminho: '/nas/manuais/equipamentos/Manual_Operacao_Equipamento_X.pdf',\n    tipo: 'PDF',\n    tamanho: '5.2 MB',\n    dataModificacao: '2023-11-10',\n    categoria: 'manual',\n    permissoes: 'publico',\n    cliente: null,\n    fornecedor: 'Fornecedor XYZ',\n    op: null\n  },\n  {\n    nome: 'Norma_ISO_9001_2015.pdf',\n    caminho: '/nas/normas/iso/Norma_ISO_9001_2015.pdf',\n    tipo: 'PDF',\n    tamanho: '3.1 MB',\n    dataModificacao: '2023-08-05',\n    categoria: 'norma',\n    permissoes: 'publico',\n    cliente: null,\n    fornecedor: null,\n    op: null\n  }\n];\n\n// Filtrar arquivos baseado na query\nconst resultados = arquivos.filter(arq => {\n  const searchText = query.toLowerCase();\n  return arq.nome.toLowerCase().includes(searchText) ||\n         arq.categoria.toLowerCase().includes(searchText) ||\n         (arq.cliente && arq.cliente.toLowerCase().includes(searchText)) ||\n         (arq.fornecedor && arq.fornecedor.toLowerCase().includes(searchText)) ||\n         (arq.op && arq.op.toLowerCase().includes(searchText));\n});\n\nif (resultados.length === 0) {\n  return 'Nenhum arquivo encontrado para: ' + query;\n}\n\n// Formatar resultados\nlet resposta = 'Arquivos encontrados (' + resultados.length + '):\\n\\n';\nresultados.forEach((arq, idx) => {\n  resposta += (idx + 1) + '. ' + arq.nome + '\\n';\n  resposta += '   Caminho: ' + arq.caminho + '\\n';\n  resposta += '   Tipo: ' + arq.tipo + ' | Tamanho: ' + arq.tamanho + '\\n';\n  resposta += '   Categoria: ' + arq.categoria + '\\n';\n  resposta += '   Permissões: ' + arq.permissoes + '\\n';\n  if (arq.cliente) resposta += '   Cliente: ' + arq.cliente + '\\n';\n  if (arq.fornecedor) resposta += '   Fornecedor: ' + arq.fornecedor + '\\n';\n  if (arq.op) resposta += '   OP: ' + arq.op + '\\n';\n  resposta += '   Modificado: ' + arq.dataModificacao + '\\n\\n';\n});\n\nreturn resposta;"
+      },
+      "id": "315114fe-77f6-4675-aef8-5a244847a477",
+      "name": "Busca Arquivos NAS",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        1136,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Valida se o usuário tem permissão para acessar um arquivo específico. Verifica permissões de acesso (público, restrito, confidencial) e retorna se o acesso é permitido ou negado. Use SEMPRE antes de fornecer conteúdo de arquivos restritos.",
+        "jsCode": "// Validação de permissões (substituir por sistema real de permissões)\nconst arquivo = $input.item.json.arquivo || '';\nconst usuario = $input.item.json.usuario || 'anonimo';\n\n// Simular verificação de permissões\nconst permissoes = {\n  'Certificado_INMETRO_2024.pdf': 'publico',\n  'Proposta_Cliente_ABC_2024.pdf': 'restrito',\n  'Manual_Operacao_Equipamento_X.pdf': 'publico',\n  'Norma_ISO_9001_2015.pdf': 'publico'\n};\n\nconst usuariosAutorizados = {\n  'Proposta_Cliente_ABC_2024.pdf': ['admin', 'vendas', 'gerencia']\n};\n\nconst permissao = permissoes[arquivo] || 'desconhecido';\n\nif (permissao === 'publico') {\n  return 'ACESSO PERMITIDO: Arquivo público, sem restrições.';\n}\n\nif (permissao === 'restrito') {\n  const autorizados = usuariosAutorizados[arquivo] || [];\n  if (autorizados.includes(usuario)) {\n    return 'ACESSO PERMITIDO: Usuário autorizado para arquivo restrito.';\n  } else {\n    return 'ACESSO NEGADO: Arquivo restrito. Usuário não autorizado. Solicite permissão ao administrador.';\n  }\n}\n\nif (permissao === 'confidencial') {\n  return 'ACESSO NEGADO: Arquivo confidencial. Acesso apenas para administradores.';\n}\n\nreturn 'ACESSO NEGADO: Permissões desconhecidas para este arquivo.';"
+      },
+      "id": "29679ccc-4827-4fa9-9792-148c6edcb02f",
+      "name": "Validação de Permissões",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        1264,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "resposta": "Texto da resposta ao usuário",
+          "arquivosEncontrados": [
+            "arquivo1.pdf",
+            "arquivo2.pdf"
+          ],
+          "fontes": [
+            "caminho/arquivo1.pdf",
+            "caminho/arquivo2.pdf"
+          ],
+          "temCertificacao": false,
+          "temRestricao": false,
+          "confianca": "alta"
+        }
+      },
+      "id": "5f5a92a6-6680-4b85-87d1-d0d6ec7b9c26",
+      "name": "Parser de Resposta",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1392,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "resposta",
+              "name": "resposta",
+              "value": "={{ $json.output.resposta }}",
+              "type": "string"
+            },
+            {
+              "id": "arquivos",
+              "name": "arquivos",
+              "value": "={{ $json.output.arquivosEncontrados }}",
+              "type": "array"
+            },
+            {
+              "id": "fontes",
+              "name": "fontes",
+              "value": "={{ $json.output.fontes }}",
+              "type": "array"
+            },
+            {
+              "id": "temCertificacao",
+              "name": "temCertificacao",
+              "value": "={{ $json.output.temCertificacao }}",
+              "type": "boolean"
+            },
+            {
+              "id": "temRestricao",
+              "name": "temRestricao",
+              "value": "={{ $json.output.temRestricao }}",
+              "type": "boolean"
+            },
+            {
+              "id": "confianca",
+              "name": "confianca",
+              "value": "={{ $json.output.confianca }}",
+              "type": "string"
+            },
+            {
+              "id": "usuario",
+              "name": "usuario",
+              "value": "={{ $('Portal Vesper Chat').item.json.sessionId }}",
+              "type": "string"
+            },
+            {
+              "id": "pergunta",
+              "name": "pergunta",
+              "value": "={{ $('Portal Vesper Chat').item.json.chatInput }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "dbcd68de-8f01-496b-a3e8-990f6449e530",
+      "name": "Extrair Dados da Resposta",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1600,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.temRestricao }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            },
+            {
+              "leftValue": "={{ $json.confianca }}",
+              "rightValue": "baixa",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "57c14477-ea73-4a94-81b9-8322c9d3ed81",
+      "name": "Verificar Restrições",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1824,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tipoAlerta",
+              "name": "tipoAlerta",
+              "value": "={{ $json.temRestricao ? \"ACESSO_RESTRITO\" : \"BAIXA_CONFIANCA\" }}",
+              "type": "string"
+            },
+            {
+              "id": "usuario",
+              "name": "usuario",
+              "value": "={{ $json.usuario }}",
+              "type": "string"
+            },
+            {
+              "id": "pergunta",
+              "name": "pergunta",
+              "value": "={{ $json.pergunta }}",
+              "type": "string"
+            },
+            {
+              "id": "arquivos",
+              "name": "arquivos",
+              "value": "={{ $json.arquivos }}",
+              "type": "array"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "ALERTA",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "19780b43-7e00-4dc0-b283-e50bdc65394f",
+      "name": "Registrar Alerta de Segurança",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2048,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c1aa8830-5784-43d5-8931-8d97b871fc71",
+      "name": "Combinar Registros",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2272,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "tipoRegistro",
+              "name": "tipoRegistro",
+              "value": "BUSCA_NORMAL",
+              "type": "string"
+            },
+            {
+              "id": "usuario",
+              "name": "usuario",
+              "value": "={{ $json.usuario }}",
+              "type": "string"
+            },
+            {
+              "id": "pergunta",
+              "name": "pergunta",
+              "value": "={{ $json.pergunta }}",
+              "type": "string"
+            },
+            {
+              "id": "arquivos",
+              "name": "arquivos",
+              "value": "={{ $json.arquivos }}",
+              "type": "array"
+            },
+            {
+              "id": "fontes",
+              "name": "fontes",
+              "value": "={{ $json.fontes }}",
+              "type": "array"
+            },
+            {
+              "id": "confianca",
+              "name": "confianca",
+              "value": "={{ $json.confianca }}",
+              "type": "string"
+            },
+            {
+              "id": "timestamp",
+              "name": "timestamp",
+              "value": "={{ $json.timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "status",
+              "name": "status",
+              "value": "OK",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "898ea8a3-3625-497c-b501-30c9d8ef6d87",
+      "name": "Registrar Auditoria Normal",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2048,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "vesper_auditoria"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "tipo": "={{ $json.tipoAlerta ?? $json.tipoRegistro }}",
+            "usuario": "={{ $json.usuario }}",
+            "pergunta": "={{ $json.pergunta }}",
+            "arquivos": "={{ JSON.stringify($json.arquivos) }}",
+            "fontes": "={{ JSON.stringify($json.fontes ?? []) }}",
+            "confianca": "={{ $json.confianca ?? \"n/a\" }}",
+            "status": "={{ $json.status }}",
+            "timestamp": "={{ $json.timestamp }}"
+          },
+          "schema": [
+            {
+              "id": "tipo",
+              "displayName": "tipo",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "usuario",
+              "displayName": "usuario",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "pergunta",
+              "displayName": "pergunta",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "arquivos",
+              "displayName": "arquivos",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "fontes",
+              "displayName": "fontes",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "confianca",
+              "displayName": "confianca",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "1252b169-041e-4b3e-bdf3-b263ee683923",
+      "name": "Salvar Auditoria",
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2496,
+        304
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "3c2d8920-57b9-4fac-8b4c-666349c16e1e",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Portal Vesper Chat": {
+      "main": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória do Chat": {
+      "ai_memory": [
+        [
+          {
+            "node": "Portal Vesper Chat",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Vesper": {
+      "main": [
+        [
+          {
+            "node": "Extrair Dados da Resposta",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória do Agente": {
+      "ai_memory": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Base de Conhecimento": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings OpenAI": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Base de Conhecimento",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Busca Arquivos NAS": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validação de Permissões": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser de Resposta": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Vesper",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Dados da Resposta": {
+      "main": [
+        [
+          {
+            "node": "Verificar Restrições",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Restrições": {
+      "main": [
+        [
+          {
+            "node": "Registrar Alerta de Segurança",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Auditoria Normal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Alerta de Segurança": {
+      "main": [
+        [
+          {
+            "node": "Combinar Registros",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Registros": {
+      "main": [
+        [
+          {
+            "node": "Salvar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Auditoria Normal": {
+      "main": [
+        [
+          {
+            "node": "Combinar Registros",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Portal Vesper Chat",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "ef28371d-8a8d-49b6-849e-29d8b3103ee7",
+  "tags": []
+}

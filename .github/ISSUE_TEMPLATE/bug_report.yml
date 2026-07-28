@@ -1,0 +1,45 @@
+name: Relatar bug
+description: Registre um comportamento reproduzível do Portal.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Resumo
+      description: O que aconteceu e qual era o comportamento esperado?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Como reproduzir
+      placeholder: |
+        1. Acesse...
+        2. Clique...
+        3. Observe...
+    validations:
+      required: true
+  - type: dropdown
+    id: module
+    attributes:
+      label: Módulo
+      options:
+        - Dashboard
+        - Administração
+        - Estoque
+        - Compras
+        - Aprovações
+        - Kanban
+        - TI
+        - Chat / Koda
+        - Arquivos / Knowledge
+        - Automações
+        - Outro
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidências
+      description: Prints, logs sanitizados ou detalhes do ambiente. Nunca envie credenciais ou dados pessoais.

@@ -1,0 +1,979 @@
+{
+  "updatedAt": "2026-05-20T13:03:42.511Z",
+  "createdAt": "2026-05-19T20:03:44.846Z",
+  "name": "KNOWLEDGE - RAG Auditoria",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "t01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "t02",
+      "name": "Webhook Knowledge",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "path": "vesper/knowledge/rag-auditoria",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "t03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "t04",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n01",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst d = raw.body || raw.query || raw;\nd.runtime_mode = d.runtime_mode || \"MOCK\";\nd.correlation_id = d.correlation_id || (\"KNG-\" + Date.now());\nd.request_id = d.request_id || (\"REQ-\" + Math.random().toString(36).substr(2,8).toUpperCase());\nd.user = d.user || {id:\"system\",name:\"Auto\",role:\"user\",department:\"general\"};\nd.payload = d.payload || {};\nd.metadata = d.metadata || {};\nif (!d.payload.query && d.message) {\n  d.payload.query = d.message;\n}\nconst msg = (d.message || \"\").toLowerCase();\nconst q = (d.payload.query || \"\").toLowerCase();\nif (!d.action) {\n  if (d.payload.file_id || d.payload.file_name || d.payload.content) d.action = \"sync_document\";\n  else if (d.payload.document_id && (/vigente|validar|vencido|check/.test(msg) || /vigente|validar|vencido|check/.test(q))) d.action = \"verify_document\";\n  else if (d.payload.entity_type) d.action = \"entity_memory\";\n  else if (/auditoria|\\blog\\b|rastrear|historico/.test(msg) || /auditoria|\\blog\\b|rastrear|historico/.test(q)) d.action = \"audit_search\";\n  else if (/capa|plano de acao|corretiva|preventiva/.test(msg) || /capa|plano de acao|corretiva|preventiva/.test(q)) d.action = \"capa_draft\";\n  else if (/nao conformidade|qualidade|falha/.test(msg) || /nao conformidade|qualidade|falha/.test(q)) d.action = \"quality_check\";\n  else d.action = \"query\";\n}\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n02",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst action = d.action || \"query\";\nconst missing = [];\nif (action === \"query\" && !pl.query && !d.message) {\n  missing.push(\"query\");\n}\nif (action === \"sync_document\" && !pl.file_name && !pl.content) {\n  missing.push(\"file_name_or_content\");\n}\nif (action === \"verify_document\" && !pl.document_id && !pl.file_name) {\n  missing.push(\"document_id_or_file_name\");\n}\nif (action === \"entity_memory\" && !pl.entity_type) {\n  missing.push(\"entity_type\");\n}\nd._validation = {valid: missing.length === 0, missing};\nd._needs_info = missing.length > 0;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Check Needs Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._needs_info }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        }
+      }
+    },
+    {
+      "id": "n04",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        780
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._status = \"needs_info\";\nconst miss = (d._validation ? d._validation.missing : null) || [\"query\"];\nd._clarification = {\n  questions: miss.map(function(m){return \"Informar \" + m + \" para consultar o RAG\";}),\n  missing: miss\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Classify Query",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst q = (d.payload.query || d.message || \"\").toLowerCase();\nlet type = \"general\";\nif (/fornecedor|cotacao|compra|p2p/.test(q)) type = \"purchase\";\nelse if (/proposta|venda|cliente|quote|comercial/.test(q)) type = \"commercial\";\nelse if (/producao|kanban|\\bop\\b|ordem/.test(q)) type = \"production\";\nelse if (/computador|printer|impressora|email|rede|helpdesk|ticket/.test(q)) type = \"internal_helpdesk\";\nelse if (/nao conformidade|capa|auditoria|norma|inmetro|\\bex\\b|classificada/.test(q)) type = \"quality\";\nelse if (/lei|compliance|lgpd|regulamento/.test(q)) type = \"compliance\";\nconst isEx = /\\bex\\b|classificada|inmetro|explosao|seguranca/.test(q);\nconst isFin = /preco|valor|custo|margem|faturamento|financeiro/.test(q);\nconst isSec = /senha|token|credencial|acesso|permissao/.test(q);\nconst isQual = /qualidade|nao conformidade|capa|falha|norma/.test(q);\nconst sensitive = isEx || isFin || isSec || isQual || /cliente|fornecedor/.test(q);\nd._classification = {\n  query_type: type,\n  requires_source: d.payload.require_sources !== false,\n  sensitive: sensitive,\n  ex_inmetro_related: isEx,\n  financial_related: isFin,\n  security_related: isSec,\n  quality_related: isQual\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Risk Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst cls = d._classification || {};\nconst pl = d.payload || {};\nconst q = (pl.query || d.message || \"\").toLowerCase();\nlet risk = \"low\";\nif (cls.security_related || cls.ex_inmetro_related || /creden|senha|token|chave|exaustor para area classificada/i.test(q)) {\n  risk = \"critical\";\n} else if (cls.financial_related || cls.quality_related || [\"verify_document\", \"capa_draft\"].includes(d.action) || /fornecedor|aco|compra|proposta|cliente|\\bop\\b|kanban/i.test(q)) {\n  risk = \"high\";\n} else if ([\"entity_memory\", \"audit_search\", \"sync_document\"].includes(d.action) || /historico|rastrear|manual/i.test(q)) {\n  risk = \"medium\";\n}\nd._risk_level = risk;\nd._requires_approval = (risk === \"critical\" && [\"verify_document\", \"capa_draft\"].includes(d.action)) || (risk === \"critical\" && d.action === \"query\");\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1650,
+        500
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "sync_document",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "verify_document",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "entity_memory",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "audit_search",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "quality_check",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "capa_draft",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "source_lookup",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Sync Document Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        100
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst fname = pl.file_name || \"documento_sem_nome.txt\";\nconst docId = \"doc_sync_\" + Math.random().toString(36).substr(2,6);\nconst content = pl.content || \"Conteudo mock do documento sincronizado.\";\nconst chunks = [\n  {chunk_id: docId + \"_c1\", text: content.substring(0, 100), offset: 0},\n  {chunk_id: docId + \"_c2\", text: content.substring(100, 200), offset: 100}\n].filter(function(c){return c.text.length > 0;});\nd._sync_result = {\n  document_id: docId,\n  file_name: fname,\n  chunks_created: chunks.length,\n  chunks: chunks,\n  embedding_status: \"mocked\",\n  portal_synced: false,\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/knowledge/index\" : \"MOCK: chunks gerados\"\n};\nd._status = \"document_synced\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Retrieve Sources Node",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst q = (pl.query || d.message || \"\").toLowerCase();\nconst docId = (pl.document_id || \"\").toLowerCase();\nconst fileName = (pl.file_name || \"\").toLowerCase();\nif (d.runtime_mode === \"PORTAL\") {\n  d._retrieved = {note: \"TODO: POST /api/knowledge/query\", sources: []};\n  return [{json: d}];\n}\nconst now = new Date();\nconst expired = new Date(now.getTime() - 30 * 86400000).toISOString().split(\"T\")[0];\nconst future = new Date(now.getTime() + 180 * 86400000).toISOString().split(\"T\")[0];\nconst db = [\n  {\n    source_id: \"DOC-TECH-001\",\n    title: \"Manual de Exaustores Axiais Vesper\",\n    document_type: \"manual\", module: \"comercial\", version: \"2.1\", status: \"current\",\n    valid_until: future, owner: \"Engenharia\",\n    snippet: \"Os exaustores axiais Vesper devem ser instalados com distancia minima de 1.5 metros de obstaculos. Vazao nominal de 5000 m3/h.\",\n    tags: [\"exaustor\", \"axial\", \"instalacao\", \"vazao\"]\n  },\n  {\n    source_id: \"DOC-COMM-002\",\n    title: \"Politica Comercial de Propostas e Margens\",\n    document_type: \"politica\", module: \"comercial\", version: \"1.0\", status: \"current\",\n    valid_until: future, owner: \"Comercial\",\n    snippet: \"Margem minima para locacao de ventiladores e de 35% e para vendas e de 25%. Descontos adicionais requerem aprovacao da diretoria.\",\n    tags: [\"margem\", \"desconto\", \"locacao\", \"venda\", \"politica\"]\n  },\n  {\n    source_id: \"DOC-QUAL-003\",\n    title: \"Procedimento de Cotacao de Fornecedores\",\n    document_type: \"procedimento\", module: \"compras\", version: \"3.4\", status: \"current\",\n    valid_until: future, owner: \"Compras\",\n    snippet: \"Toda cotacao de fornecedor de aco deve conter no minimo 3 propostas validas. O prazo de entrega deve ser menor que 15 dias uteis.\",\n    tags: [\"fornecedor\", \"cotacao\", \"compras\", \"aco\", \"prazo\"]\n  },\n  {\n    source_id: \"DOC-SEC-004\",\n    title: \"Documento Area EX e Certificacao INMETRO\",\n    document_type: \"norma\", module: \"quality\", version: \"1.2\", status: \"current\",\n    valid_until: future, owner: \"Qualidade\",\n    snippet: \"Equipamentos para area classificada EX zona 1 requerem certificacao INMETRO and selo de conformidade ativo antes da expedicao.\",\n    tags: [\"ex\", \"inmetro\", \"classificada\", \"explosao\", \"qualidade\", \"selo\"]\n  },\n  {\n    source_id: \"DOC-QUAL-VENCIDO\",\n    title: \"Procedimento de Qualidade Antigo\",\n    document_type: \"procedimento\", module: \"quality\", version: \"1.0\", status: \"outdated\",\n    valid_until: expired, owner: \"Qualidade\",\n    snippet: \"Procedimento antigo de inspecao visual de solda antes da auditoria de 2024.\",\n    tags: [\"qualidade\", \"inspecao\", \"solda\", \"vencido\"]\n  },\n  {\n    source_id: \"MEM-SUPP-001\",\n    title: \"Historico do Fornecedor Alfa\",\n    document_type: \"historico\", module: \"compras\", version: \"1.0\", status: \"current\",\n    valid_until: future, owner: \"Compras\",\n    snippet: \"Aco Rio possui score de 92%. Prazo medio de entrega e de 12 dias. Historico de boa qualidade sem nao conformidades recentes.\",\n    tags: [\"aco rio\", \"fornecedor\", \"score\", \"entrega\"]\n  },\n  {\n    source_id: \"MEM-MAT-002\",\n    title: \"Historico da Chapa Galvanizada 0.80\",\n    document_type: \"historico\", module: \"general\", version: \"1.0\", status: \"current\",\n    valid_until: future, owner: \"Compras\",\n    snippet: \"Chapa galvanizada 0.80 mm ultimo preco registrado foi R$ 45.00/m2 com o fornecedor Aco Rio em marco de 2026.\",\n    tags: [\"chapa\", \"galvanizada\", \"preco\", \"aco rio\"]\n  }\n];\nconst matched = db.filter(function(doc) {\n  if (docId && doc.source_id.toLowerCase() === docId) return true;\n  if (fileName && doc.title.toLowerCase().indexOf(fileName) !== -1) return true;\n  if (!q) return false;\n  const words = q.split(/\\s+/).filter(function(w){return w.length > 2;});\n  let score = 0;\n  words.forEach(function(w) {\n    if (doc.title.toLowerCase().indexOf(w) !== -1) score += 3;\n    if (doc.snippet.toLowerCase().indexOf(w) !== -1) score += 2;\n    doc.tags.forEach(function(t){\n      if (t.toLowerCase().indexOf(w) !== -1) score += 1;\n    });\n  });\n  return score > 0;\n});\nconst top_k = pl.top_k || 5;\nd._retrieved = {\n  sources: matched.slice(0, top_k),\n  total_found: matched.length\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n19",
+      "name": "Switch After Retrieve",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2150,
+        320
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "verify_document",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "quality_check",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "source_lookup",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Verify Document Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        150
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst sources = (d._retrieved && d._retrieved.sources) || [];\nlet status = \"success\";\nlet docInfo = {};\nif (sources.length > 0) {\n  const first = sources[0];\n  docInfo = {\n    document_id: first.source_id,\n    title: first.title,\n    status: first.status,\n    valid_until: first.valid_until,\n    version: first.version,\n    owner: first.owner,\n    is_expired: new Date(first.valid_until) < new Date()\n  };\n  if (first.status === \"outdated\" || docInfo.is_expired) {\n    status = \"document_outdated\";\n    d._risk_level = \"high\";\n  }\n} else {\n  status = \"failed\";\n  docInfo = {document_id: pl.document_id, status: \"unknown\", note: \"Documento nao encontrado na base.\"};\n}\nd._verification_result = docInfo;\nd._status = status;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n11",
+      "name": "Entity Memory Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        480
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst type = pl.entity_type || \"other\";\nconst id = pl.entity_id || \"unknown\";\nlet memory = {};\nif (d.runtime_mode === \"PORTAL\") {\n  memory = {note: \"TODO: GET /api/knowledge/entity-memory?type=\" + type + \"&id=\" + id};\n} else {\n  if (type === \"supplier\") {\n    memory = {\n      entity_id: id,\n      entity_type: type,\n      supplier_name: \"Aco Rio LTDA\",\n      quality_score: 0.92,\n      average_delivery_days: 12,\n      last_quotes: [\"RFQ-102\", \"RFQ-105\"],\n      risk_notes: \"Sem nao conformidades nos ultimos 12 meses.\"\n    };\n  } else if (type === \"material\") {\n    memory = {\n      entity_id: id,\n      entity_type: type,\n      material_name: \"Chapa Galvanizada 0.80 mm\",\n      last_price: 45.00,\n      price_unit: \"m2\",\n      suppliers: [\"Aco Rio\", \"Metalurgica Sul\"],\n      sku_candidates: [\"SKU-GALV-080\"]\n    };\n  } else {\n    memory = {\n      entity_id: id,\n      entity_type: type,\n      note: \"MOCK: memoria generica de entidade\",\n      last_updated: new Date().toISOString()\n    };\n  }\n}\nd._entity_memory = memory;\nd._status = \"success\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Audit Search Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        640
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst cid = d.correlation_id;\nd._audit_result = {\n  correlation_id: cid,\n  query_id: d.request_id,\n  events: [\n    {timestamp: new Date(Date.now() - 5000).toISOString(), event_type: \"interno.request_received\", user: d.user.id},\n    {timestamp: new Date().toISOString(), event_type: \"knowledge.query_received\", user: \"system\"}\n  ],\n  total_events: 2,\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: GET /api/auditoria/by-correlation/\" + cid : \"MOCK: logs recuperados\"\n};\nd._status = \"audit_ready\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "Quality Check Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        320
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst sources = (d._retrieved && d._retrieved.sources) || [];\nlet issues = [];\nlet status = \"success\";\nif (sources.length > 0) {\n  const first = sources[0];\n  if (first.status === \"outdated\") {\n    issues.push(\"Documento de referencia '\" + first.title + \"' esta vencido/outdated\");\n    status = \"quality_review_required\";\n  }\n} else {\n  issues.push(\"Nenhuma fonte documental homologada encontrada para validar a acao.\");\n  status = \"quality_review_required\";\n}\nd._quality_result = {\n  quality_status: issues.length === 0 ? \"ok\" : \"review_required\",\n  issues: issues,\n  checked_at: new Date().toISOString(),\n  recommended_action: issues.length === 0 ? \"Prosseguir operacionalmente\" : \"Acionar departamento de qualidade para revisao da norma.\"\n};\nd._status = status;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n14",
+      "name": "CAPA Draft Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        1000
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nd._capa_result = {\n  capa_id: \"CAPA-DRAFT-\" + Math.random().toString(36).substr(2,6).toUpperCase(),\n  problem: d.message || pl.notes || \"Nao conformidade identificada no fluxo de qualidade.\",\n  probable_cause: \"Uso de procedimentos desatualizados ou falta de treinamento na equipe.\",\n  containment: \"Bloquear movimentacao do lote / suspender uso da versao do documento.\",\n  corrective_action: \"Atualizar documento para a versao homologada e registrar no Portal.\",\n  preventive_action: \"Criar alerta automatico de 15 dias antes do vencimento no modulo de auditoria.\",\n  suggested_owner: \"TI / Qualidade\",\n  suggested_deadline: new Date(Date.now() + 15 * 86400000).toISOString().split(\"T\")[0],\n  status: \"draft\",\n  requires_approval: true,\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/qualidade/capa\" : \"MOCK: rascunho de CAPA gerado\"\n};\nd._status = \"capa_draft_ready\";\nd._requires_approval = true;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "Answer Builder Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        490
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst sources = (d._retrieved && d._retrieved.sources) || [];\nconst strict = d.payload.strict_mode !== false;\nlet answer = \"\";\nlet status = \"sources_found\";\nlet conf = 0;\nif (sources.length === 0) {\n  answer = \"Nao encontrei fonte confiavel suficiente para responder com seguranca.\";\n  status = \"no_sources\";\n  conf = 0;\n} else {\n  const first = sources[0];\n  conf = first.status === \"current\" ? 0.90 : 0.40;\n  if (first.source_id === \"DOC-SEC-004\") {\n    answer = \"De acordo com o documento '\" + first.title + \"' (v\" + first.version + \"), \" + first.snippet;\n  } else if (first.source_id === \"DOC-QUAL-003\") {\n    answer = \"De acordo com a diretriz '\" + first.title + \"', toda cotacao de aco precisa de 3 propostas validas com entrega < 15 dias.\";\n  } else {\n    answer = \"Baseado em '\" + first.title + \"': \" + first.snippet;\n  }\n}\nd._answer_data = {\n  answer: answer,\n  sources: sources,\n  confidence: conf,\n  gaps: sources.length === 0 ? [\"fontes_insuficientes\"] : [],\n  strict_mode: strict\n};\nd._status = status;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n16",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2750,
+        550
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst evtMap = {\n  \"query\":\"knowledge.query_received\", \"sync_document\":\"knowledge.document_synced\",\n  \"verify_document\":\"knowledge.document_verified\", \"entity_memory\":\"knowledge.entity_memory_queried\",\n  \"audit_search\":\"knowledge.audit_search_ready\", \"quality_check\":\"quality.review_required\",\n  \"capa_draft\":\"quality.capa_draft_created\"\n};\nd._audit = {\n  event_type: evtMap[d.action] || \"knowledge.processed\",\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  action: d.action, status: d._status, risk_level: d._risk_level || \"low\",\n  runtime_mode: d.runtime_mode, timestamp: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/automation/audit\" : \"MOCK: audit_logged=true\"\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n17",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3000,
+        550
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst st = d._status || \"success\";\nconst summ = d._blocked_reason ||\n  (d._answer_data ? d._answer_data.answer.substring(0,80) : null) ||\n  (d._capa_result ? \"CAPA Rascunho: \" + d._capa_result.capa_id : null) ||\n  (d._verification_result ? \"Doc verificado: \" + d._verification_result.document_id : null) ||\n  d.message || st;\nreturn [{json: {\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  status: st, agent: \"knowledge\",\n  workflow: \"KNOWLEDGE - RAG Auditoria\",\n  summary: summ,\n  data: {\n    answer: d._answer_data ? d._answer_data.answer : \"\",\n    sources: d._answer_data ? d._answer_data.sources : (d._retrieved ? d._retrieved.sources : []),\n    confidence: d._answer_data ? d._answer_data.confidence : 0,\n    gaps: d._answer_data ? d._answer_data.gaps : [],\n    document: d._sync_result || d._verification_result || {},\n    entity_memory: d._entity_memory || {},\n    audit: d._audit_result || {},\n    quality: d._quality_result || {},\n    capa: d._capa_result || {},\n    portal_synced: false\n  },\n  missing_fields: (d._validation ? d._validation.missing : null) || [],\n  requires_approval: d._requires_approval || false,\n  approval_id: d._approval_id || null,\n  risk_level: d._risk_level || \"low\",\n  next_action: st === \"sources_found\" ? \"review_sources\"\n    : st === \"no_sources\" ? \"escalate_to_human\"\n    : st === \"document_synced\" ? \"verify_index\"\n    : st === \"document_outdated\" ? \"quality_review\"\n    : st === \"quality_review_required\" ? \"escalate_quality\"\n    : st === \"capa_draft_ready\" ? \"approve_capa\"\n    : st === \"needs_info\" ? \"request_more_info\"\n    : \"none\"\n}}];"
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._error_note = \"TODO: vincular WORKFLOW_ERROR_AUDIT nas Settings\";\nd._status = \"failed\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "s01",
+      "name": "Sticky TESTE",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        350
+      ],
+      "parameters": {
+        "content": "## TESTE\nManual Trigger com dados simulados.\nNao chama vector db, email ou IA real.",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Sticky MOCK",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        560
+      ],
+      "parameters": {
+        "content": "## MOCK\nWebhook POST /webhook/vesper/knowledge/rag-auditoria\nruntime_mode=MOCK\nSimula documentos e historico.",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Sticky PORTAL",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        760
+      ],
+      "parameters": {
+        "content": "## PORTAL\nruntime_mode=PORTAL\nBase: $env.VESPER_PORTAL_BASE_URL\nToken: $env.VESPER_PORTAL_API_KEY",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Sticky PGVector",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        960
+      ],
+      "parameters": {
+        "content": "## PGVector PG SQL\nConexao futura com pgvector no PostgreSQL.\nNao requer conexao real nesta v1.",
+        "width": 310,
+        "height": 150
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Sticky Error",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1130
+      ],
+      "parameters": {
+        "content": "## Error Audit\nID: WORKFLOW_ERROR_AUDIT\nSettings > Error Workflow: vincular a este ID",
+        "width": 310,
+        "height": 140
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Sticky Chamadas",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1290
+      ],
+      "parameters": {
+        "content": "## Chamada de Agentes\nCompras, Comercial, Producao e Interno podem usar Execute Workflow.",
+        "width": 310,
+        "height": 160
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Sticky Fontes",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1470
+      ],
+      "parameters": {
+        "content": "## Fontes de Dados\nNunca inventar normas, precos, prazos ou clientes sem fonte homologada.",
+        "width": 310,
+        "height": 160
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Sticky Endpoints",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1650
+      ],
+      "parameters": {
+        "content": "## Endpoints Futuros Portal\nGET /api/files\nGET /api/files/{id}\nPOST /api/knowledge/index\nPOST /api/knowledge/query\nGET /api/knowledge/sources\nGET /api/knowledge/entity-memory\nPOST /api/auditoria/logs\nGET /api/auditoria/by-correlation/{id}\nPOST /api/auditoria/search\nPOST /api/qualidade/nao-conformidades\nPOST /api/qualidade/capa\nPOST /api/automation/audit",
+        "width": 310,
+        "height": 240
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Knowledge": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Classify Query",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Query": {
+      "main": [
+        [
+          {
+            "node": "Risk Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Classification": {
+      "main": [
+        [
+          {
+            "node": "Switch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action": {
+      "main": [
+        [
+          {
+            "node": "Sync Document Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieve Sources Node",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Entity Memory Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Audit Search Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieve Sources Node",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "CAPA Draft Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieve Sources Node",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieve Sources Node",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Retrieve Sources Node",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Sync Document Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Entity Memory Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Search Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CAPA Draft Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Retrieve Sources Node": {
+      "main": [
+        [
+          {
+            "node": "Switch After Retrieve",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch After Retrieve": {
+      "main": [
+        [
+          {
+            "node": "Verify Document Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Quality Check Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer Builder Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer Builder Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Answer Builder Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verify Document Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Quality Check Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Answer Builder Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "4c023b55-f9ae-406d-9e06-9f02d4e60ce2",
+  "tags": []
+}

@@ -1,0 +1,1470 @@
+{
+  "updatedAt": "2026-05-20T13:03:27.589Z",
+  "createdAt": "2026-05-19T17:28:49.821Z",
+  "name": "CORE - Gateway Supervisor",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "n01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n02",
+      "name": "Webhook Gateway",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {
+        "path": "vesper/core/gateway",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n04",
+      "name": "Sticky Notes - Overview",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -200,
+        -100
+      ],
+      "parameters": {
+        "content": "## CORE - Gateway Supervisor\n\n**Modo TESTE**: Use Manual Trigger. Payload com runtime_mode=TESTE.\n\n**Modo MOCK**: Use Webhook POST /webhook/vesper/core/gateway com runtime_mode=MOCK.\n\n**Modo PORTAL**: Use Webhook com runtime_mode=PORTAL.\n\nConectado diretamente a sub-workflows reais via Execute Workflow.",
+        "width": 400,
+        "height": 200
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        300,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "function generateId() { return Math.random().toString(36).substr(2, 9); }\n\nconst raw = $input.first().json;\nconst body = raw.body || raw;\n\nconst input = {\n  runtime_mode: body.runtime_mode || $env.VESPER_RUNTIME_MODE || \"MOCK\",\n  correlation_id: body.correlation_id || \"gw_\" + generateId(),\n  request_id: body.request_id || \"req_\" + generateId(),\n  source: body.source || \"manual\",\n  user: body.user || { id: \"\", name: \"\", role: \"\", department: \"\" },\n  module_hint: body.module_hint || \"\",\n  message: body.message || body.payload?.description || \"\",\n  payload: body.payload || {},\n  approved: body.approved || false,\n  metadata: body.metadata || {}\n};\n\nreturn [{ json: input }];"
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        550,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nlet valid = true;\nconst missing = [];\n\nif (!d.message && (!d.payload || Object.keys(d.payload).length === 0)) {\n  valid = false;\n  missing.push(\"message or payload required\");\n}\n\nif (!d.user?.id && d.runtime_mode === \"PORTAL\") {\n  missing.push(\"user.id recommended for PORTAL mode\");\n}\n\nd._validation = { valid, missing };\nif (!valid) d._needs_info = true;\n\nreturn [{ json: d }];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Permission Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        800,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\n\nif (d.runtime_mode === \"PORTAL\" && d.user?.id) {\n  d._permissions = { _placeholder: true, note: \"PORTAL will call GET /api/users/{id}/permissions\" };\n} else {\n  d._permissions = {\n    granted: [\"compras.read\",\"compras.create\",\"propostas.read\",\"kanban.read\",\"helpdesk.create\",\"ia.use\"]\n  };\n}\n\nreturn [{ json: d }];"
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Intent Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1050,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst text = (d.message + \" \" + JSON.stringify(d.payload)).toLowerCase();\nconst hint = (d.module_hint || \"\").toLowerCase();\n\nconst kw = {\n  compras: [\"comprar\",\"compra\",\"cotação\",\"cotacao\",\"fornecedor\",\"pedido de compra\",\"orçamento fornecedor\",\"chapa\",\"material\",\"nfe\",\"nota fiscal\",\"preço fornecedor\"],\n  comercial_propostas: [\"proposta\",\"orçamento cliente\",\"cliente pediu\",\"cotar para cliente\",\"venda\",\"locação\",\"locacao\",\"exaustor\",\"ventilador\",\"climatizador\",\"ventfog\",\"pdf proposta\"],\n  producao_kanban: [\"op \",\"produção\",\"producao\",\"kanban\",\"card\",\"prazo\",\"atrasado\",\"material pendente\",\"fábrica\",\"fabrica\"],\n  interno_geral: [\"helpdesk\",\"chamado\",\"pc\",\"computador\",\"senha\",\"acesso\",\"certificado\",\"usuário\",\"usuario\",\"chat interno\",\"ti\",\"impressora\",\"rede\"],\n  knowledge_query: [\"manual\",\"procedimento\",\"norma\",\"documento\",\"histórico\",\"historico\",\"política\",\"politica\",\"como funciona\",\"consultar\"],\n  approval: [\"aprovar\",\"aprovação\",\"aprovacao\",\"rejeitar\",\"aprovado\",\"rejected\",\"approved\",\"approval_id\",\"appr_\"],\n  audit_error: [\"erro\",\"falha\",\"exception\",\"dead letter\",\"auditoria\",\"workflow falhou\"],\n  rh: [\"novo colaborador\",\"colaborador começa\",\"começa segunda-feira\",\"comeca segunda-feira\",\"onboarding\",\"admissão\",\"admissao\",\"integração\",\"integracao\",\"documentação de funcionário\",\"documentacao de funcionario\",\"checklist de entrada\",\"checklist de colaborador\",\"desligamento\",\"offboarding\",\"bloqueio de acesso de colaborador\"],\n  financeiro: [\"pagamento\",\"despesa\",\"vencimento\",\"nota\",\"boleto\",\"cobrança\",\"cobranca\",\"dados bancários\",\"dados bancarios\",\"fatura\",\"banco\"],\n  estoque: [\"estoque\",\"abaixo do mínimo\",\"abaixo do minimo\",\"reposição\",\"reposicao\",\"falta de material\",\"saldo de material\",\"mínimo de estoque\",\"minimo de estoque\"],\n  helpdesk_ti: [\"computador\",\"computadores\",\"notebook\",\"internet\",\"senha\",\"acesso\",\"e-mail\",\"impressora\",\"equipamento\",\"certificado\",\"software\",\"monitor\"],\n  qualidade: [\"inmetro\",\"ex\",\"capa\",\"auditoria\",\"não conformidade\",\"nao conformidade\",\"qualidade\",\"certificação\",\"certificacao\",\"provas de explosão\",\"provas de explosao\",\"área classificada\",\"area classificada\"],\n  war_room: [\"resumo executivo\",\"situação da empresa\",\"situacao da empresa\",\"saúde dos workflows\",\"saude dos workflows\",\"erros\",\"riscos\",\"pendências\",\"pendencias\",\"consolidado\"],\n  aprovacoes: [\"aprovações pendentes\",\"aprovacoes pendentes\",\"pendências de aprovação\",\"pendencias de aprovacao\",\"aprovar solicitação\",\"aprovar solicitacao\",\"rejeitar solicitação\",\"rejeitar solicitacao\",\"escalonamento\",\"lista de aprovação\",\"lista de aprovacao\"]\n};\n\nconst rh_strong = [\"novo colaborador\",\"colaborador começa\",\"começa segunda-feira\",\"onboarding\",\"admissão\",\"offboarding\",\"desligamento\"];\n\nlet intent = \"unknown\";\nlet confidence = 0.30;\n\nif (hint && kw[hint]) {\n  const hit = kw[hint].some(k => text.includes(k));\n  intent = hint;\n  confidence = hit ? 0.95 : 0.80;\n} else {\n  let best_intent = \"unknown\";\n  let max_hits = 0;\n  for (const [k, words] of Object.entries(kw)) {\n    const hits = words.filter(w => text.includes(w)).length;\n    if (hits > max_hits) {\n      max_hits = hits;\n      best_intent = k;\n    } else if (hits === max_hits && max_hits > 0) {\n      if (k === \"approval\" || k === \"audit_error\") {\n        best_intent = k;\n      }\n    }\n  }\n  \n  if (text.includes(\"checklist\") && best_intent === \"unknown\") {\n    if (/onboarding|colaborador|começa|admissão|rh|funcionário|funcionario/.test(text)) {\n      best_intent = \"rh\";\n      max_hits = 1;\n    } else {\n      best_intent = \"producao_kanban\";\n      max_hits = 1;\n    }\n  } else if (text.includes(\"checklist\") && best_intent === \"producao_kanban\") {\n    if (/onboarding|colaborador|começa|admissão|rh|funcionário|funcionario/.test(text)) {\n      best_intent = \"rh\";\n    }\n  }\n\n  if (max_hits >= 2) {\n    intent = best_intent;\n    confidence = 0.85;\n  } else if (max_hits === 1) {\n    intent = best_intent;\n    confidence = 0.60;\n  }\n\n  if (intent === \"rh\") {\n    const has_strong = rh_strong.some(term => text.includes(term));\n    if (has_strong) {\n      confidence = 0.85;\n    }\n  }\n}\n\nconst entities = {};\nconst amtMatch = text.match(/r\\$\\s?([\\d.,]+)/);\nif (amtMatch) {\n  let val = amtMatch[1].replace(/\\./g, \"\").replace(\",\", \".\");\n  entities.amount = parseFloat(val) || 0;\n} else {\n  entities.amount = 0;\n}\nconst opMatch = text.match(/\\bop[\\s_]?(\\d+)/i);\nif (opMatch) entities.op_id = opMatch[0];\nconst apprMatch = text.match(/appr_\\w+/);\nif (apprMatch) entities.approval_id = apprMatch[0];\nentities.customer_related = /cliente|proposta/.test(text);\nentities.supplier_related = /fornecedor|cotação|cotacao/.test(text);\nentities.financial_related = /compra|preço|r\\$|orçamento|proposta/.test(text);\nentities.production_related = /\\bop\\b|produção|kanban/.test(text);\nentities.security_related = /senha|acesso|token|credencial/.test(text);\nentities.ex_inmetro_related = /\\bex\\b|área classificada|inmetro|explosão|prova de explosão/.test(text);\n\nlet risk = \"low\";\nif (entities.financial_related || entities.customer_related || entities.supplier_related || entities.security_related) risk = \"high\";\nif (entities.production_related && !entities.financial_related) risk = \"medium\";\nif (intent === \"knowledge_query\" || intent === \"rh\") risk = \"low\";\nif (entities.ex_inmetro_related) risk = \"critical\";\nif (intent === \"audit_error\") risk = \"medium\";\n\nd._intent = intent;\nd._confidence = confidence;\nd._entities = entities;\nd._risk_level = risk;\n\nreturn [{ json: d }];"
+      }
+    },
+    {},
+    {
+      "id": "n08b",
+      "name": "RH Override",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1500,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nif (d._intent === 'rh') {\n  const text = (d.message + ' ' + JSON.stringify(d.payload)).toLowerCase();\n  const rh_strong = [\"novo colaborador\",\"colaborador começa\",\"começa segunda-feira\",\"onboarding\",\"admissão\",\"offboarding\",\"desligamento\"];\n  if (rh_strong.some(term => text.includes(term))) {\n    d._confidence = 0.95;\n  }\n}\nreturn [{ json: d }];"
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Policy Guard",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1300,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst text = (d.message + \" \" + JSON.stringify(d.payload)).toLowerCase();\n\nlet requires_approval = false;\nlet status = \"routed\";\n\nif (d._needs_info || d._intent === \"unknown\" || d._confidence < 0.80) {\n  status = \"needs_info\";\n} else if (d._risk_level === \"high\" || d._risk_level === \"critical\") {\n  if (!d.approved) {\n    requires_approval = true;\n    status = \"approval_pending\";\n  }\n}\n\nlet approval_id = null;\nif (requires_approval) {\n  approval_id = d._entities?.approval_id || (\"appr_gw_\" + Math.random().toString(36).substr(2,8));\n}\n\nd._policy = { requires_approval, status, approval_id };\n\nreturn [{ json: d }];"
+      }
+    },
+    {
+      "id": "n_check_policy",
+      "name": "Check Policy Status",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1550,
+        400
+      ],
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{ $json._policy?.status || 'routed' }}",
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._policy?.status }}",
+                    "rightValue": "approval_pending",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._policy?.status }}",
+                    "rightValue": "needs_info",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Switch Intent Route",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1800,
+        400
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "compras",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "comercial_propostas",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "producao_kanban",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "interno_geral",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "knowledge_query",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "approval",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "audit_error",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "rh",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "financeiro",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "estoque",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "helpdesk_ti",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "qualidade",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "war_room",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json._intent }}",
+                    "rightValue": "aprovacoes",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "none"
+        }
+      }
+    },
+    {
+      "id": "n11",
+      "name": "ROUTE - Compras Agent",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        -200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_compras",
+      "name": "EXEC - COMPRAS Procure to Pay",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        -200
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_PURCHASES_AGENT"
+      }
+    },
+    {
+      "id": "n12",
+      "name": "ROUTE - Comercial Propostas",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_comercial",
+      "name": "EXEC - COMERCIAL Quote to Cash",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        0
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_COMMERCIAL_AGENT"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "ROUTE - Producao Kanban",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"analyze_op\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_producao",
+      "name": "EXEC - PRODUCAO Kanban OP",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        200
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_PRODUCTION_AGENT"
+      }
+    },
+    {
+      "id": "n14",
+      "name": "ROUTE - Interno Portal",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_interno",
+      "name": "EXEC - INTERNO Portal Assistant",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        400
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_INTERNAL_ASSISTANT"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "ROUTE - Knowledge RAG",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        600
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"query\",\n  payload: {\n    query: d.message,\n    module: d.module_hint || \"general\",\n    strict_mode: true,\n    require_sources: true,\n    top_k: 5\n  },\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_knowledge",
+      "name": "EXEC - KNOWLEDGE RAG Auditoria",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        600
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_KNOWLEDGE_AGENT"
+      }
+    },
+    {
+      "id": "n16",
+      "name": "ROUTE - Approval Center",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        800
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  approval_type: \"other\",\n  requested_by: d.user,\n  summary: d.message,\n  details: {\n    gateway_intent: d._intent,\n    gateway_entities: d._entities,\n    payload: d.payload\n  },\n  risk_level: d._risk_level || \"medium\",\n  amount: d._entities?.amount || 0,\n  currency: \"BRL\",\n  metadata: d.metadata || {}\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_approval",
+      "name": "EXEC - CORE Approval Center",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        800
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_APPROVAL_CENTER"
+      }
+    },
+    {
+      "id": "n17",
+      "name": "ROUTE - Error Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        1000
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  workflow: \"CORE - Gateway Supervisor\",\n  agent: \"supervisor\",\n  module: \"core\",\n  failed_node: \"Gateway classified audit_error intent\",\n  error_message: d.message,\n  payload_summary: {\n    intent: d._intent,\n    confidence: d._confidence,\n    risk_level: d._risk_level\n  },\n  input: d,\n  user: d.user,\n  risk_context: {\n    security_related: d._entities?.security_related || false,\n    financial_related: d._entities?.financial_related || false,\n    production_related: d._entities?.production_related || false,\n    ex_inmetro_related: d._entities?.ex_inmetro_related || false\n  },\n  retry_count: 0\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_error",
+      "name": "EXEC - CORE Error Audit",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        1000
+      ],
+      "parameters": {
+        "workflowId": "WORKFLOW_ERROR_AUDIT"
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        700
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nd._selected_agent = \"supervisor\";\nd._selected_workflow = \"\";\nd._routing_reason = \"Intent unknown or ambiguous (confidence=\" + d._confidence + \"). Requesting more info.\";\nd._policy = d._policy || {};\nd._policy.status = \"needs_info\";\nreturn [{ json: d }];"
+      }
+    },
+    {
+      "id": "n19",
+      "name": "Normalize Downstream Response",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2550,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const downstream = $input.first().json;\nconst gateway = $('Policy Guard').first().json;\n\nconst selected_agent = downstream.agent || gateway._selected_agent || \"unknown\";\nconst selected_workflow = downstream.workflow || gateway._selected_workflow || \"\";\nconst downstream_status = downstream.status || \"success\";\nconst risk_level = downstream.risk_level || gateway._risk_level || \"low\";\nconst requires_approval = downstream.requires_approval || gateway._policy?.requires_approval || false;\nconst approval_id = downstream.approval_id || gateway._policy?.approval_id || null;\nconst next_action = downstream.next_action || (gateway._policy?.status === \"approval_pending\" ? \"wait_for_approval\" : \"none\");\n\nconst out = {\n  ...gateway,\n  _routing_reason: `Downstream executed: ${selected_workflow} with status ${downstream_status}`,\n  _route_message: downstream.summary || downstream.message || \"Executed downstream agent\",\n  _downstream: {\n    selected_agent,\n    selected_workflow,\n    downstream_status,\n    downstream_response: downstream,\n    risk_level,\n    requires_approval,\n    approval_id,\n    next_action\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "n20",
+      "name": "Audit Log Placeholder",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2800,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst auditPayload = {\n  event_type: \"ia.gateway_routed\",\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  intent: d._intent,\n  selected_agent: d._downstream?.selected_agent || d._selected_agent,\n  risk_level: d._downstream?.risk_level || d._risk_level,\n  confidence: d._confidence,\n  user: d.user,\n  source: d.source,\n  runtime_mode: d.runtime_mode,\n  timestamp: new Date().toISOString()\n};\nd._audit_log = auditPayload;\nreturn [{ json: d }];"
+      }
+    },
+    {
+      "id": "n21",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3050,
+        400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\n\nlet status = d._policy?.status || (d._needs_info ? \"needs_info\" : \"routed\");\nlet requires_approval = d._policy?.requires_approval || false;\nlet approval_id = d._policy?.approval_id || null;\nlet risk_level = d._risk_level || \"low\";\nlet next_action = status === \"routed\" ? \"execute_agent\" :\n                 status === \"approval_pending\" ? \"wait_for_approval\" :\n                 status === \"needs_info\" ? \"request_more_info\" :\n                 status === \"blocked\" ? \"manual_review\" : \"none\";\n\nlet downstream_status = null;\nlet downstream_response = null;\n\nif (d._downstream) {\n  status = d._downstream.downstream_status;\n  downstream_status = d._downstream.downstream_status;\n  downstream_response = d._downstream.downstream_response;\n  requires_approval = d._downstream.requires_approval;\n  approval_id = d._downstream.approval_id;\n  risk_level = d._downstream.risk_level;\n  next_action = d._downstream.next_action;\n}\n\nconst out = {\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  status: status,\n  agent: \"supervisor\",\n  workflow: \"CORE - Gateway Supervisor\",\n  summary: d._routing_reason || \"Gateway processed request\",\n  message: d._route_message || \"\",\n  metadata: d.metadata || {},\n  data: {\n    intent: d._intent || \"unknown\",\n    confidence: d._confidence || 0,\n    selected_agent: d._downstream?.selected_agent || d._selected_agent || \"\",\n    selected_workflow: d._downstream?.selected_workflow || d._selected_workflow || \"\",\n    downstream_status: downstream_status,\n    downstream_response: downstream_response,\n    risk_level: risk_level,\n    requires_approval: requires_approval,\n    approval_id: approval_id,\n    routing_reason: d._routing_reason || \"\",\n    portal_synced: false,\n    entities: d._entities || {}\n  },\n  missing_fields: d._validation?.missing || [],\n  requires_approval: requires_approval,\n  approval_id: approval_id,\n  risk_level: risk_level,\n  next_action: next_action\n};\n\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "n22",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        0
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n23",
+      "name": "ERROR - Send to Core Error Audit",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        250,
+        0
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const err = $input.first().json;\nreturn [{ json: {\n  event_type: \"ia.gateway_error\",\n  workflow: \"CORE - Gateway Supervisor\",\n  error: err,\n  note: \"TODO: Em PORTAL, chamar POST /webhook/vesper/core/error-audit via HTTP Request.\"\n}}];"
+      }
+    },
+    {
+      "id": "route_ai_rh",
+      "name": "ROUTE - AI RH",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        1200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_rh",
+      "name": "EXEC - AI RH",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        1200
+      ],
+      "parameters": {
+        "workflowId": "IVSV8kGMLbI77P7v"
+      }
+    },
+    {
+      "id": "route_ai_financeiro",
+      "name": "ROUTE - AI Financeiro",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        1400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_financeiro",
+      "name": "EXEC - AI Financeiro",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        1400
+      ],
+      "parameters": {
+        "workflowId": "sEb2fdz1CsBGdqrG"
+      }
+    },
+    {
+      "id": "route_ai_estoque",
+      "name": "ROUTE - AI Estoque",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        1600
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_estoque",
+      "name": "EXEC - AI Estoque",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        1600
+      ],
+      "parameters": {
+        "workflowId": "gY7OJFcb1gKIO2PG"
+      }
+    },
+    {
+      "id": "route_ai_helpdesk_ti",
+      "name": "ROUTE - AI Helpdesk TI",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        1800
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_helpdesk_ti",
+      "name": "EXEC - AI Helpdesk TI",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        1800
+      ],
+      "parameters": {
+        "workflowId": "8eiZJutfJzGWBcLa"
+      }
+    },
+    {
+      "id": "route_ai_qualidade",
+      "name": "ROUTE - AI Qualidade",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        2000
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_qualidade",
+      "name": "EXEC - AI Qualidade",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        2000
+      ],
+      "parameters": {
+        "workflowId": "DQqK9hgVQugbpJUh"
+      }
+    },
+    {
+      "id": "route_ai_war_room",
+      "name": "ROUTE - AI War Room IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        2200
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_war_room",
+      "name": "EXEC - AI War Room IA",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        2200
+      ],
+      "parameters": {
+        "workflowId": "ZUw5rYMxgWI0eXn4"
+      }
+    },
+    {
+      "id": "route_ai_aprovacoes",
+      "name": "ROUTE - AI Aprovacoes IA",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2050,
+        2400
+      ],
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const d = $input.first().json;\nconst out = {\n  runtime_mode: d.runtime_mode,\n  correlation_id: d.correlation_id,\n  request_id: d.request_id,\n  source: \"gateway\",\n  user: d.user,\n  message: d.message,\n  action: \"intake\",\n  payload: d.payload,\n  metadata: {\n    gateway_intent: d._intent,\n    gateway_confidence: d._confidence,\n    gateway_entities: d._entities,\n    gateway_risk_level: d._risk_level\n  }\n};\nreturn [{ json: out }];"
+      }
+    },
+    {
+      "id": "exec_ai_aprovacoes",
+      "name": "EXEC - AI Aprovacoes IA",
+      "type": "n8n-nodes-base.executeWorkflow",
+      "typeVersion": 1,
+      "position": [
+        2300,
+        2400
+      ],
+      "parameters": {
+        "workflowId": "CwEjjhfG6oX8Jm8j"
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Gateway": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Permission Context",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Permission Context": {
+      "main": [
+        [
+          {
+            "node": "Intent Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Intent Classification": {
+      "main": [
+        [
+          {
+            "node": "Policy Guard",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Policy Guard": {
+      "main": [
+        [
+          {
+            "node": "Check Policy Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Policy Status": {
+      "main": [
+        [
+          {
+            "node": "Audit Log Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Switch Intent Route",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Intent Route": {
+      "main": [
+        [
+          {
+            "node": "ROUTE - Compras Agent",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - Comercial Propostas",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - Producao Kanban",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - Interno Portal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - Knowledge RAG",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - Approval Center",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - Error Audit",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI RH",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI Financeiro",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI Estoque",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI Helpdesk TI",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI Qualidade",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI War Room IA",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "ROUTE - AI Aprovacoes IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Compras Agent": {
+      "main": [
+        [
+          {
+            "node": "EXEC - COMPRAS Procure to Pay",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - COMPRAS Procure to Pay": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Comercial Propostas": {
+      "main": [
+        [
+          {
+            "node": "EXEC - COMERCIAL Quote to Cash",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - COMERCIAL Quote to Cash": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Producao Kanban": {
+      "main": [
+        [
+          {
+            "node": "EXEC - PRODUCAO Kanban OP",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - PRODUCAO Kanban OP": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Interno Portal": {
+      "main": [
+        [
+          {
+            "node": "EXEC - INTERNO Portal Assistant",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - INTERNO Portal Assistant": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Knowledge RAG": {
+      "main": [
+        [
+          {
+            "node": "EXEC - KNOWLEDGE RAG Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - KNOWLEDGE RAG Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Approval Center": {
+      "main": [
+        [
+          {
+            "node": "EXEC - CORE Approval Center",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - CORE Approval Center": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - Error Audit": {
+      "main": [
+        [
+          {
+            "node": "EXEC - CORE Error Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - CORE Error Audit": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Audit Log Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Downstream Response": {
+      "main": [
+        [
+          {
+            "node": "Audit Log Placeholder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log Placeholder": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "ERROR - Send to Core Error Audit",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI RH": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI RH",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI RH": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI Financeiro": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI Financeiro",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI Financeiro": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI Estoque": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI Estoque",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI Estoque": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI Helpdesk TI": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI Helpdesk TI",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI Helpdesk TI": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI Qualidade": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI Qualidade",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI Qualidade": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI War Room IA": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI War Room IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI War Room IA": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "ROUTE - AI Aprovacoes IA": {
+      "main": [
+        [
+          {
+            "node": "EXEC - AI Aprovacoes IA",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "EXEC - AI Aprovacoes IA": {
+      "main": [
+        [
+          {
+            "node": "Normalize Downstream Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "f05cb0d4-1f9d-43c9-a8d0-13cdf38a5a01",
+  "tags": []
+}

@@ -1,0 +1,664 @@
+{
+  "updatedAt": "2026-05-20T17:43:17.439Z",
+  "createdAt": "2026-05-20T16:34:26.049Z",
+  "name": "AI - PORTAL VESPER - Agente de Aprovações e Escalonamento",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours"
+            }
+          ]
+        }
+      },
+      "id": "d294ac48-4afe-4a46-b372-bbf608f6e84b",
+      "name": "Agendamento Horário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/automation/approvals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "3c7d79ed-65e0-4234-a4ff-2daa10b093fc",
+      "name": "Consultar Aprovações Pendentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id",
+              "name": "id",
+              "value": "={{ $json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "titulo",
+              "name": "titulo",
+              "value": "={{ $json.titulo }}",
+              "type": "string"
+            },
+            {
+              "id": "tipo",
+              "name": "tipo",
+              "value": "={{ $json.tipo }}",
+              "type": "string"
+            },
+            {
+              "id": "valor",
+              "name": "valor",
+              "value": "={{ $json.valor }}",
+              "type": "number"
+            },
+            {
+              "id": "responsavel",
+              "name": "responsavel",
+              "value": "={{ $json.responsavel }}",
+              "type": "string"
+            },
+            {
+              "id": "emailResponsavel",
+              "name": "emailResponsavel",
+              "value": "={{ $json.emailResponsavel }}",
+              "type": "string"
+            },
+            {
+              "id": "gestor",
+              "name": "gestor",
+              "value": "={{ $json.gestor }}",
+              "type": "string"
+            },
+            {
+              "id": "emailGestor",
+              "name": "emailGestor",
+              "value": "={{ $json.emailGestor }}",
+              "type": "string"
+            },
+            {
+              "id": "dataCriacao",
+              "name": "dataCriacao",
+              "value": "={{ $json.dataCriacao }}",
+              "type": "string"
+            },
+            {
+              "id": "prazoLimite",
+              "name": "prazoLimite",
+              "value": "={{ $json.prazoLimite }}",
+              "type": "string"
+            },
+            {
+              "id": "descricao",
+              "name": "descricao",
+              "value": "={{ $json.descricao }}",
+              "type": "string"
+            },
+            {
+              "id": "horasRestantes",
+              "name": "horasRestantes",
+              "value": "={{ Math.floor((new Date($json.prazoLimite) - $now) / (1000 * 60 * 60)) }}",
+              "type": "number"
+            },
+            {
+              "id": "diasPendente",
+              "name": "diasPendente",
+              "value": "={{ Math.floor(($now - new Date($json.dataCriacao)) / (1000 * 60 * 60 * 24)) }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "d63acd7c-ac19-4f18-a93a-59b2b3bd8742",
+      "name": "Normalizar Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        688,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um especialista em análise de aprovações corporativas.\n\nAnalise a seguinte aprovação e classifique sua prioridade:\n\nID: {{ $json.id }}\nTítulo: {{ $json.titulo }}\nTipo: {{ $json.tipo }}\nValor: R$ {{ $json.valor }}\nResponsável: {{ $json.responsavel }}\nHoras Restantes: {{ $json.horasRestantes }}\nDias Pendente: {{ $json.diasPendente }}\nDescrição: {{ $json.descricao }}\n\nClassifique em:\n- prioridade: \"critica\", \"alta\", \"media\", \"baixa\"\n- categoria: \"vencida\" (prazo passou), \"vencendo\" (< 24h), \"urgente\" (< 48h), \"normal\"\n- urgencia: número de 1 a 10\n- requerEscalonamento: true se vencida OU crítica OU urgência >= 8\n- justificativa: explicação breve da classificação\n\nIMPORTANTE: Nunca aprove ou rejeite automaticamente. Apenas classifique.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um assistente de classificação de aprovações. Analise objetivamente e retorne JSON estruturado conforme o schema fornecido."
+        }
+      },
+      "id": "c4d0d9bb-89f9-416a-86de-d25d443a8eea",
+      "name": "Agente de Classificação",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        912,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.2
+        }
+      },
+      "id": "92d841dc-2fd3-44ae-a642-ef41062a06fc",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        928,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "prioridade": "critica",
+          "categoria": "vencida",
+          "urgencia": 10,
+          "requerEscalonamento": true,
+          "justificativa": "Aprovação vencida há 2 dias com alto valor financeiro"
+        }
+      },
+      "id": "7e22f521-1280-4584-aff9-2fc9031edfe2",
+      "name": "Parser Estruturado",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1056,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "id",
+              "name": "id",
+              "value": "={{ $(\"Normalizar Dados\").item.json.id }}",
+              "type": "string"
+            },
+            {
+              "id": "titulo",
+              "name": "titulo",
+              "value": "={{ $(\"Normalizar Dados\").item.json.titulo }}",
+              "type": "string"
+            },
+            {
+              "id": "tipo",
+              "name": "tipo",
+              "value": "={{ $(\"Normalizar Dados\").item.json.tipo }}",
+              "type": "string"
+            },
+            {
+              "id": "valor",
+              "name": "valor",
+              "value": "={{ $(\"Normalizar Dados\").item.json.valor }}",
+              "type": "number"
+            },
+            {
+              "id": "responsavel",
+              "name": "responsavel",
+              "value": "={{ $(\"Normalizar Dados\").item.json.responsavel }}",
+              "type": "string"
+            },
+            {
+              "id": "emailResponsavel",
+              "name": "emailResponsavel",
+              "value": "={{ $(\"Normalizar Dados\").item.json.emailResponsavel }}",
+              "type": "string"
+            },
+            {
+              "id": "gestor",
+              "name": "gestor",
+              "value": "={{ $(\"Normalizar Dados\").item.json.gestor }}",
+              "type": "string"
+            },
+            {
+              "id": "emailGestor",
+              "name": "emailGestor",
+              "value": "={{ $(\"Normalizar Dados\").item.json.emailGestor }}",
+              "type": "string"
+            },
+            {
+              "id": "horasRestantes",
+              "name": "horasRestantes",
+              "value": "={{ $(\"Normalizar Dados\").item.json.horasRestantes }}",
+              "type": "number"
+            },
+            {
+              "id": "diasPendente",
+              "name": "diasPendente",
+              "value": "={{ $(\"Normalizar Dados\").item.json.diasPendente }}",
+              "type": "number"
+            },
+            {
+              "id": "prioridade",
+              "name": "prioridade",
+              "value": "={{ $json.output.prioridade }}",
+              "type": "string"
+            },
+            {
+              "id": "categoria",
+              "name": "categoria",
+              "value": "={{ $json.output.categoria }}",
+              "type": "string"
+            },
+            {
+              "id": "urgencia",
+              "name": "urgencia",
+              "value": "={{ $json.output.urgencia }}",
+              "type": "number"
+            },
+            {
+              "id": "requerEscalonamento",
+              "name": "requerEscalonamento",
+              "value": "={{ $json.output.requerEscalonamento }}",
+              "type": "boolean"
+            },
+            {
+              "id": "justificativa",
+              "name": "justificativa",
+              "value": "={{ $json.output.justificativa }}",
+              "type": "string"
+            },
+            {
+              "id": "dataProcessamento",
+              "name": "dataProcessamento",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ecd86e9e-a5a3-4f4e-abd8-759c2817fe9e",
+      "name": "Combinar Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1264,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.categoria }}",
+                    "rightValue": "vencida",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "combinator": "or",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.prioridade }}",
+                    "rightValue": "critica",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  },
+                  {
+                    "leftValue": "={{ $json.requerEscalonamento }}",
+                    "rightValue": true,
+                    "operator": {
+                      "type": "boolean",
+                      "operation": "true"
+                    }
+                  }
+                ]
+              }
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.categoria }}",
+                    "rightValue": "vencendo",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Normal"
+        }
+      },
+      "id": "93f51bf5-f02a-4d84-95f5-30fdf644d2d8",
+      "name": "Rotear por Categoria",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1488,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "8c3f6e7a-4270-4429-b940-7d6dbe6765e1",
+      "name": "Combinar Notificações",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2160,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "90253b9a-5f96-45d1-9405-1875ace368ea",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2384,
+        576
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "939d9d52-67ef-4863-a2e5-0d7f52f29d86",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "f71c3746-04cb-4215-ace0-5bfca16f4138",
+      "name": "Buscar Aprovações do Dia",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        464,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "aprovacoes",
+        "options": {}
+      },
+      "id": "1849fe34-3ef2-4a8f-9884-eff30897145f",
+      "name": "Agregar Resumo",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        688,
+        992
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "f09233aa-a9e6-48af-8366-d8aaa2abf5a2",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Agendamento Horário": {
+      "main": [
+        [
+          {
+            "node": "Consultar Aprovações Pendentes",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Aprovações Pendentes": {
+      "main": [
+        [
+          {
+            "node": "Normalizar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalizar Dados": {
+      "main": [
+        [
+          {
+            "node": "Agente de Classificação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de Classificação": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de Classificação",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Estruturado": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de Classificação",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Dados": {
+      "main": [
+        [
+          {
+            "node": "Rotear por Categoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rotear por Categoria": {
+      "main": [
+        [],
+        [],
+        [],
+        []
+      ]
+    },
+    "Combinar Notificações": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agendamento Diário": {
+      "main": [
+        [
+          {
+            "node": "Buscar Aprovações do Dia",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Aprovações do Dia": {
+      "main": [
+        [
+          {
+            "node": "Agregar Resumo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agregar Resumo": {
+      "main": [
+        []
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Agente de Classificação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "618038db-2552-4d2d-bafb-70fe0d4a2f6d",
+  "tags": []
+}

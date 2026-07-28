@@ -1,0 +1,945 @@
+{
+  "updatedAt": "2026-05-20T11:03:32.305Z",
+  "createdAt": "2026-05-19T19:50:13.518Z",
+  "name": "INTERNO - Portal Assistant",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "id": "t01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "t02",
+      "name": "Webhook Interno",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        600
+      ],
+      "parameters": {
+        "path": "vesper/interno/portal-assistant",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "t03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        800
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "t04",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        200
+      ],
+      "parameters": {}
+    },
+    {
+      "id": "n01",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst d = raw.body || raw.query || raw;\nd.runtime_mode = d.runtime_mode || \"MOCK\";\nd.correlation_id = d.correlation_id || (\"INT-\" + Date.now());\nd.request_id = d.request_id || (\"REQ-\" + Math.random().toString(36).substr(2,8).toUpperCase());\nd.user = d.user || {id:\"system\",name:\"Auto\",role:\"user\",department:\"interno\"};\nd.payload = d.payload || {};\nd.metadata = d.metadata || {};\nconst msg = (d.message || \"\").toLowerCase();\nif (!d.action) {\n  if (/certificado|vencimento|\\bcertif/.test(msg)) d.action = \"consult_certificate\";\n  else if (/consultar.*(computador|ativo|equipamento)|ativo de|equipamento de/.test(msg)) d.action = \"consult_asset\";\n  else if (/senha|acesso|permissao|permiss.o|login|reset/.test(msg)) d.action = \"password_access_request\";\n  else if (/onboarding|novo funcion.rio|novo colaborador/.test(msg)) d.action = \"onboarding_request\";\n  else if (/resumo|chamados de hoje|daily summary/.test(msg)) d.action = \"daily_summary\";\n  else if (/\\bpc\\b|computador|rede|internet|impressora|sistema|\\berro\\b|software/.test(msg)) d.action = \"create_ticket\";\n  else d.action = \"intake\";\n}\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n02",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        600
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst action = d.action || \"intake\";\nconst msg = d.message || \"\";\nif (action === \"daily_summary\") { d._validation = {valid:true,missing:[]}; d._needs_info = false; return [{json:d}]; }\nconst missing = [];\nconst hasMsg = msg.length > 5;\nconst hasId = pl.ticket_id || pl.asset_id || pl.computer_name || pl.target_user_id;\nif (action === \"close_ticket_request\" && !pl.ticket_id) missing.push(\"ticket_id\");\nif (action === \"consult_asset\" && !hasId && !hasMsg) missing.push(\"asset_id_or_computer_name_or_user\");\nif (!hasMsg && !hasId) missing.push(\"message_or_payload_id\");\nd._validation = {valid: missing.length === 0, missing};\nd._needs_info = missing.length > 0;\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n03",
+      "name": "Check Needs Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        850,
+        600
+      ],
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._needs_info }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {}
+        }
+      }
+    },
+    {
+      "id": "n04",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        780
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._status = \"needs_info\";\nconst miss = (d._validation ? d._validation.missing : null) || [\"message_or_payload\"];\nd._clarification = {questions: miss.map(function(m){return \"Informar \" + m + \" para continuar\";}), missing: miss};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n05",
+      "name": "Classify Internal Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1100,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst msg = (d.message || \"\").toLowerCase();\nconst pl = d.payload || {};\nlet category = pl.category || \"other\";\nlet urgency = pl.urgency || \"medium\";\nif (category === \"other\" || !pl.category) {\n  if (/impressora|printer/.test(msg)) category = \"printer\";\n  else if (/\\brede\\b|internet|wifi|wi-fi|network/.test(msg)) category = \"network\";\n  else if (/senha|acesso|permissao|login|reset|password/.test(msg)) category = \"password\";\n  else if (/certificado|certif/.test(msg)) category = \"certificate\";\n  else if (/\\bpc\\b|computador|monitor|teclado|mouse|hardware/.test(msg)) category = \"hardware\";\n  else if (/software|programa|aplicativo|instalar|install/.test(msg)) category = \"software\";\n  else if (/email|e-mail|correio/.test(msg)) category = \"email\";\n  else if (/portal|sistema do portal/.test(msg)) category = \"portal_system\";\n  else if (/producao|produção|erp|sistema da prod/.test(msg)) category = \"erp_system\";\n  else if (/onboarding|novo funcion/.test(msg)) category = \"onboarding\";\n  else if (/ativo|equipamento|asset/.test(msg)) category = \"asset\";\n}\nif (!pl.urgency) {\n  if (/parado|sem internet em todo|sistema parado|credencial vaz|acesso indevido|perda de dados/.test(msg)) urgency = \"critical\";\n  else if (/urgente|nao consigo trabalhar|critico|email parado|setor parado/.test(msg)) urgency = \"high\";\n}\nconst secSensitive = [\"password\",\"access\",\"account\"].includes(category) || /senha|acesso|credencial/.test(msg);\nconst needsHuman = [\"critical\",\"high\"].includes(urgency) || secSensitive;\nd._classification = {\n  category: category, urgency: urgency,\n  needs_human: needsHuman, security_sensitive: secSensitive,\n  title: \"Chamado \" + category.toUpperCase() + \" - \" + (d.message || \"Sem titulo\").substring(0, 60),\n  description: d.message || pl.notes || \"\"\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n06",
+      "name": "Risk Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1380,
+        500
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst cls = d._classification || {};\nconst msg = (d.message || \"\").toLowerCase();\nconst urgency = cls.urgency || \"medium\";\nconst category = cls.category || \"other\";\nlet risk = \"low\";\nif (/credencial vaz|acesso indevido|perda de dados|breach/.test(msg)) { risk = \"critical\"; }\nelse if (cls.security_sensitive || urgency === \"critical\" || /setor parado|sistema parado/.test(msg)) { risk = \"high\"; }\nelse if (urgency === \"high\" || [\"certificate\",\"password\",\"access\",\"account\",\"erp_system\"].includes(category)) { risk = \"high\"; }\nelse if (urgency === \"medium\" || [\"network\",\"email\",\"portal_system\",\"hardware\"].includes(category)) { risk = \"medium\"; }\nd._risk_level = risk;\nd._requires_approval = [\"password_access_request\",\"onboarding_request\"].includes(d.action);\nd._policy = {\n  create_ticket_allowed: true, classify_ticket_allowed: true,\n  suggest_solution_allowed: true, consult_asset_allowed: true,\n  consult_cert_allowed: true, notify_allowed: true,\n  reset_password_blocked: true, change_access_blocked: true,\n  install_software_blocked: true, delete_user_blocked: true,\n  security_sensitive: cls.security_sensitive || false\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n07",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1650,
+        500
+      ],
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "daily_summary",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "consult_asset",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "consult_certificate",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "notify_department",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "password_access_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "onboarding_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "close_ticket_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create_ticket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "classify_ticket",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "suggest_solution",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            },
+            {
+              "conditions": {
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "intake",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    }
+                  }
+                ],
+                "combinator": "and",
+                "options": {}
+              }
+            }
+          ]
+        },
+        "fallbackOutput": "extra"
+      }
+    },
+    {
+      "id": "n08",
+      "name": "Daily Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst items = pl.summary_items || {};\nd._daily_summary = {\n  data: new Date().toISOString().split(\"T\")[0],\n  tickets_abertos: items.tickets_abertos || 12,\n  tickets_criticos: items.tickets_criticos || 2,\n  certificados_vencendo: items.certificados_vencendo || 2,\n  ativos_com_alerta: items.ativos_com_alerta || 1,\n  solicitacoes_acesso_pendentes: items.solicitacoes_acesso_pendentes || 3,\n  notificacoes_preparadas: items.notificacoes_preparadas || 5,\n  acoes_recomendadas: [\"Verificar 2 chamados criticos\",\"Renovar 2 certificados\",\"Aprovar/negar 3 solicitacoes de acesso\"],\n  generated_at: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: GET /api/helpdesk/tickets?status=open\" : \"MOCK: dados simulados\"\n};\nd._status = \"daily_summary_ready\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n09",
+      "name": "Asset Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        380
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nif (d.runtime_mode === \"PORTAL\") {\n  d._asset = {note: \"TODO: GET /api/controle-ti/assets?user=\" + (pl.target_user_id||\"\") + \"&computer=\" + (pl.computer_name||\"\"), asset_id: pl.asset_id};\n} else {\n  d._asset = {\n    asset_id: pl.asset_id || (\"AT-\" + Math.random().toString(36).substr(2,6).toUpperCase()),\n    computer_name: pl.computer_name || \"PC-MOCK-001\",\n    assigned_to: pl.target_user_id || \"usuario.mock\",\n    department: pl.department || \"Administrativo\",\n    status: \"active\",\n    last_seen: new Date(Date.now() - 86400000).toISOString(),\n    os: \"Windows 11\", warranty: \"2025-12-31\",\n    notes: \"MOCK: ativo simulado\"\n  };\n}\nd._status = \"asset_found\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n10",
+      "name": "Certificate Lookup",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        560
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nlet alerts = [];\nif (d.runtime_mode === \"PORTAL\") {\n  d._certificate = {note: \"TODO: GET /api/controle-ti/certificados/vencendo\"};\n} else {\n  const now = new Date();\n  const exp10 = new Date(now.getTime() + 10 * 86400000).toISOString().split(\"T\")[0];\n  const expPast = new Date(now.getTime() - 5 * 86400000).toISOString().split(\"T\")[0];\n  d._certificates = [\n    {certificate_id:\"CERT-001\",name:\"SSL Portal Vesper\",owner:\"TI\",expires_at:exp10,days_to_expire:10,status:\"expiring\",recommended_action:\"Renovar imediatamente\"},\n    {certificate_id:\"CERT-002\",name:\"Certificado INMETRO EX\",owner:\"Qualidade\",expires_at:expPast,days_to_expire:-5,status:\"expired\",recommended_action:\"Renovacao urgente - produto bloqueado\"},\n    {certificate_id:\"CERT-003\",name:\"Assinatura Digital NF-e\",owner:\"Financeiro\",expires_at:\"2025-12-31\",days_to_expire:220,status:\"valid\",recommended_action:\"Monitorar\"}\n  ];\n  alerts = d._certificates.filter(function(c){return c.status !== \"valid\";});\n  d._cert_alerts = alerts;\n  if (alerts.length > 0) { d._risk_level = \"high\"; d._notification_prepared = true; }\n}\nd._status = alerts.length > 0 ? \"certificate_alert\" : \"asset_found\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n11",
+      "name": "Notify Dept",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        740
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nd._notification = {\n  notification_id: \"NOTIF-\" + Math.random().toString(36).substr(2,8).toUpperCase(),\n  title: pl.notes || d.message || \"Notificacao interna\",\n  message: d.message || \"\",\n  target_department: pl.department || (d.user && d.user.department) || \"Geral\",\n  priority: d._risk_level === \"critical\" ? \"critical\" : d._risk_level === \"high\" ? \"high\" : \"normal\",\n  channels: [\"portal\",\"chat\"],\n  created_at: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/interno/notificacoes\" : \"MOCK: notification_id gerado\"\n};\nd._status = \"notification_prepared\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n12",
+      "name": "Access Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        920
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst aid = pl.approval_id || (\"appr_int_\" + Math.random().toString(36).substr(2,8));\nd._approval_id = aid;\nd._access_request = {\n  type: \"it_access\",\n  target_user: pl.target_user_id || (d.user && d.user.id) || \"usuario_nao_informado\",\n  requested_by: d.user,\n  action_requested: d.message || \"Solicitacao de acesso/senha\",\n  correlation_id: d.correlation_id,\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: Execute Workflow WORKFLOW_APPROVAL_CENTER\" : \"MOCK: approval_id=\" + aid,\n  security_warning: \"NUNCA resetar senha ou alterar acesso sem aprovacao formal.\"\n};\nd._requires_approval = true;\nd._status = \"approval_pending\";\nd._blocked_reason = \"Reset/alteracao de acesso requer aprovacao formal via Approval Center\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n13",
+      "name": "Onboarding Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        1100
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nd._onboarding = {\n  checklist: [\n    {step:\"1\",item:\"Criar usuario no sistema\",status:\"pending\",note:\"Requer aprovacao\"},\n    {step:\"2\",item:\"Configurar e-mail corporativo\",status:\"pending\",note:\"Requer usuario criado\"},\n    {step:\"3\",item:\"Liberar acesso ao Portal Vesper\",status:\"pending\",note:\"Requer aprovacao\"},\n    {step:\"4\",item:\"Definir grupos e permissoes\",status:\"pending\",note:\"Requer aprovacao do gestor\"},\n    {step:\"5\",item:\"Preparar equipamento/computador\",status:\"pending\"},\n    {step:\"6\",item:\"Agendar treinamentos\",status:\"pending\"},\n    {step:\"7\",item:\"Coletar documentos (admissao)\",status:\"pending\"},\n    {step:\"8\",item:\"Identificar gestor responsavel\",status:\"pending\"}\n  ],\n  department: pl.department || (d.user && d.user.department) || \"Nao informado\",\n  requested_by: d.user,\n  note: \"MOCK: checklist preparado. Nao criar usuario real.\",\n  approval_required: true, approval_type: \"it_access\"\n};\nd._approval_id = \"appr_int_\" + Math.random().toString(36).substr(2,8);\nd._requires_approval = true;\nd._status = \"approval_pending\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n14",
+      "name": "Close Ticket",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        1280
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst cls = d._classification || {};\nconst isCritical = cls.urgency === \"critical\" || d._risk_level === \"critical\";\nif (!pl.ticket_id) {\n  d._status = \"needs_info\"; d._needs_info = true;\n  d._validation = {valid:false, missing:[\"ticket_id\"]};\n} else if (isCritical && pl.approved !== true) {\n  d._status = \"approval_pending\"; d._requires_approval = true;\n  d._approval_id = \"appr_int_\" + Math.random().toString(36).substr(2,8);\n  d._blocked_reason = \"Fechamento de ticket critico requer aprovacao\";\n} else if (pl.approved === true) {\n  d._status = \"success\";\n  d._close_result = {ticket_id: pl.ticket_id, closed_at: new Date().toISOString(),\n    note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/helpdesk/tickets/{id}/close\" : \"MOCK: fechado (simulado)\"};\n} else {\n  d._status = \"approval_pending\"; d._requires_approval = false;\n  d._blocked_reason = \"Confirmar fechamento informando approved=true\";\n}\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n15",
+      "name": "Main Process",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1900,
+        1460
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst cls = d._classification || {};\nconst pl = d.payload || {};\nconst category = cls.category || \"other\";\nconst tid = \"TKT-\" + Math.random().toString(36).substr(2,8).toUpperCase();\nd._ticket = {\n  ticket_id: pl.ticket_id || tid,\n  title: cls.title || (d.message || \"Chamado interno\").substring(0, 80),\n  description: cls.description || d.message || \"\",\n  category: category, urgency: cls.urgency || \"medium\", status: \"open\",\n  assigned_to: \"TI - \" + ([\"network\",\"hardware\",\"software\",\"printer\"].includes(category) ? \"Suporte\" : \"Analista\"),\n  needs_human: cls.needs_human || false,\n  security_sensitive: cls.security_sensitive || false,\n  created_at: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/helpdesk/tickets\" : \"MOCK: ticket simulado\"\n};\nconst solutions = {\n  \"network\": \"Verificar cabo de rede e sinal Wi-Fi. Reiniciar adaptador de rede. Informar se outros usuarios estao afetados.\",\n  \"printer\": \"Verificar papel, fila de impressao e conexao USB/rede. Informar modelo e setor.\",\n  \"password\": \"NAO compartilhar senha. Abrir solicitacao formal de reset via Approval Center.\",\n  \"hardware\": \"Verificar se o equipamento esta ligado e conectado. Coletar numero de patrimonio.\",\n  \"software\": \"Verificar versao instalada e mensagem de erro. Tirar print da tela.\",\n  \"email\": \"Verificar conexao e configuracoes de conta. Informar cliente de email (Outlook/Webmail).\",\n  \"certificate\": \"Verificar data de vencimento e acionar responsavel pela renovacao.\",\n  \"portal_system\": \"Tirar print do erro e informar acao que causou o problema.\",\n  \"erp_system\": \"Informar modulo afetado, acao realizada e mensagem de erro. Parar operacao se necessario.\",\n  \"onboarding\": \"Abrir solicitacao formal de onboarding. Aprovacao necessaria para criacao de acesso.\",\n  \"other\": \"Descrever melhor: o que ocorreu, quando, em qual equipamento ou sistema.\"\n};\nd._suggested_solution = {\n  category: category,\n  first_response: solutions[category] || solutions[\"other\"],\n  escalate: cls.needs_human || false,\n  security_note: cls.security_sensitive ? \"ATENCAO: envolve seguranca/acesso. Nao executar sem aprovacao.\" : \"\"\n};\nd._status = \"ticket_created\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n16",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst evtMap = {\n  \"intake\":\"interno.request_received\", \"create_ticket\":\"interno.ticket_created\",\n  \"classify_ticket\":\"interno.ticket_triaged\", \"suggest_solution\":\"interno.solution_suggested\",\n  \"consult_asset\":\"interno.asset_consulted\", \"consult_certificate\":\"interno.certificate_alert\",\n  \"notify_department\":\"interno.notification_prepared\",\n  \"password_access_request\":\"interno.approval_requested\",\n  \"onboarding_request\":\"interno.approval_requested\",\n  \"daily_summary\":\"interno.daily_summary_ready\",\n  \"close_ticket_request\":\"interno.ticket_closed_request\"\n};\nd._audit = {\n  event_type: evtMap[d.action] || \"interno.processed\",\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  action: d.action, status: d._status, risk_level: d._risk_level || \"low\",\n  runtime_mode: d.runtime_mode, timestamp: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/automation/audit\" : \"MOCK: audit_logged=true\"\n};\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "n17",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        700
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst st = d._status || \"success\";\nconst summ = d._blocked_reason ||\n  (d._ticket ? d._ticket.title : null) ||\n  (d._suggested_solution ? d._suggested_solution.first_response.substring(0,80) : null) ||\n  (d._daily_summary ? \"Resumo do dia gerado\" : null) ||\n  d.message || st;\nreturn [{json: {\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  status: st, agent: \"interno\",\n  workflow: \"INTERNO - Portal Assistant\",\n  summary: summ,\n  data: {\n    classification: d._classification || {},\n    ticket: d._ticket || {},\n    asset: d._asset || {},\n    certificate: d._certificates ? {list:d._certificates, alerts:d._cert_alerts||[]} : {},\n    suggested_solution: d._suggested_solution || {},\n    notification: d._notification || {},\n    access_request: d._access_request || {},\n    onboarding: d._onboarding || {},\n    daily_summary: d._daily_summary || {},\n    close_result: d._close_result || {},\n    approval_id: d._approval_id || null,\n    portal_synced: false\n  },\n  missing_fields: (d._validation ? d._validation.missing : null) || [],\n  requires_approval: d._requires_approval || false,\n  approval_id: d._approval_id || null,\n  risk_level: d._risk_level || \"low\",\n  next_action: st === \"ticket_created\" ? \"assign_ticket\"\n    : st === \"asset_found\" ? \"review_asset\"\n    : st === \"certificate_alert\" ? \"renew_certificate\"\n    : st === \"notification_prepared\" ? \"send_notification\"\n    : st === \"approval_pending\" ? \"wait_for_approval\"\n    : st === \"daily_summary_ready\" ? \"review_summary\"\n    : st === \"needs_info\" ? \"request_more_info\"\n    : \"none\"\n}}];"
+      }
+    },
+    {
+      "id": "n18",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        200
+      ],
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._error_note = \"TODO: vincular WORKFLOW_ERROR_AUDIT nas Settings\";\nd._status = \"failed\";\nreturn [{json: d}];"
+      }
+    },
+    {
+      "id": "disabled01",
+      "name": "DISABLED - Internal Notification Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        2450,
+        900
+      ],
+      "parameters": {
+        "fromEmail": "noreply@portal.example",
+        "toEmail": "ti@portal.example",
+        "subject": "Notificacao",
+        "message": "{{ $json.message }}"
+      },
+      "disabled": true
+    },
+    {
+      "id": "s01",
+      "name": "Sticky TESTE",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        350
+      ],
+      "parameters": {
+        "content": "## TESTE\nManual Trigger com dados simulados.\nNao chama Portal, email ou acesso real.",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s02",
+      "name": "Sticky MOCK",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        560
+      ],
+      "parameters": {
+        "content": "## MOCK\nWebhook POST /webhook/vesper/interno/portal-assistant\nruntime_mode=MOCK\nSimula tickets, ativos, certificados.",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s03",
+      "name": "Sticky PORTAL",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        760
+      ],
+      "parameters": {
+        "content": "## PORTAL\nruntime_mode=PORTAL\nBase: $env.VESPER_PORTAL_BASE_URL\nToken: $env.VESPER_PORTAL_API_KEY\nNao executar acao sensivel sem aprovacao.",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s04",
+      "name": "Sticky Gateway",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        960
+      ],
+      "parameters": {
+        "content": "## Gateway -> Interno\nGateway ID: WORKFLOW_GATEWAY_SUPERVISOR\nFuturo: Execute Workflow ou POST /webhook/vesper/interno/portal-assistant",
+        "width": 310,
+        "height": 150
+      }
+    },
+    {
+      "id": "s05",
+      "name": "Sticky Approval",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1130
+      ],
+      "parameters": {
+        "content": "## Approval Center\nID: WORKFLOW_APPROVAL_CENTER\nAcionado em: password_access_request, onboarding_request\napproval_type: it_access",
+        "width": 310,
+        "height": 160
+      }
+    },
+    {
+      "id": "s06",
+      "name": "Sticky Error",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1310
+      ],
+      "parameters": {
+        "content": "## Error Audit\nID: WORKFLOW_ERROR_AUDIT\nSettings > Error Workflow: vincular a este ID\nOu POST /webhook/vesper/core/error-audit",
+        "width": 310,
+        "height": 140
+      }
+    },
+    {
+      "id": "s07",
+      "name": "Sticky Futuro",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1470
+      ],
+      "parameters": {
+        "content": "## Futuro: Chat/HelpDesk/TI\nIMAP para e-mail de suporte\nChat Interno via webhook\nControle TI: inventario, assets, CMDB\nHelpDesk real: tickets, SLA, historico",
+        "width": 310,
+        "height": 180
+      }
+    },
+    {
+      "id": "s08",
+      "name": "Sticky Endpoints",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -280,
+        1670
+      ],
+      "parameters": {
+        "content": "## Endpoints Futuros Portal\nPOST /api/helpdesk/tickets\nGET /api/controle-ti/assets\nGET /api/controle-ti/certificados/vencendo\nPOST /api/helpdesk/tickets/{id}/close\nPOST /api/chat/messages\nPOST /api/interno/notificacoes\nPOST /api/automation/audit",
+        "width": 310,
+        "height": 210
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Interno": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Classify Internal Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Internal Request": {
+      "main": [
+        [
+          {
+            "node": "Risk Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Classification": {
+      "main": [
+        [
+          {
+            "node": "Switch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action": {
+      "main": [
+        [
+          {
+            "node": "Daily Summary",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Asset Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Certificate Lookup",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Dept",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Access Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Onboarding Handler",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Close Ticket",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Summary": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Asset Lookup": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Certificate Lookup": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notify Dept": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Access Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Onboarding Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Close Ticket": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main Process": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "510db4ac-12fd-43fc-b6b5-8eef2d7a3b0a",
+  "tags": []
+}

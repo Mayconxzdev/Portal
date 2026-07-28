@@ -1,0 +1,845 @@
+{
+  "updatedAt": "2026-05-20T13:03:48.522Z",
+  "createdAt": "2026-05-19T19:40:04.003Z",
+  "name": "PRODUCAO - Kanban OP Agent",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "t01",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vesper/producao/kanban-op",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "t02",
+      "name": "Webhook Producao",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        0,
+        608
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "t03",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        800
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "t04",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const raw = $input.first().json;\nconst d = raw.body || raw.query || raw;\nd.runtime_mode = d.runtime_mode || \"MOCK\";\nd.correlation_id = d.correlation_id || (\"PROD-\" + Date.now());\nd.request_id = d.request_id || (\"REQ-\" + Math.random().toString(36).substr(2,8).toUpperCase());\nd.user = d.user || {id:\"system\",name:\"Auto\",role:\"agent\",department:\"producao\"};\nd.payload = d.payload || {};\nd.metadata = d.metadata || {};\nconst pl = d.payload;\nconst msg = (d.message || \"\").toLowerCase();\nconst et = (pl.event_type || \"\").toLowerCase();\nif (!d.action) {\n  if (et === \"daily_report\") d.action = \"daily_report\";\n  else if (et === \"material_missing\" || /falta material|sem chapa|precisa comprar|material pendente/.test(msg)) d.action = \"detect_missing_material\";\n  else if (et === \"deadline_changed\" || /atrasad|prazo|deadline/.test(msg)) d.action = \"detect_delay\";\n  else if (et === \"card_moved\" || et === \"op_created\" || /kanban|card|\\bop\\b|producao/.test(msg)) d.action = \"analyze_op\";\n  else d.action = \"event_intake\";\n}\nreturn [{json: d}];"
+      },
+      "id": "n01",
+      "name": "Normalize Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst action = d.action || \"event_intake\";\nconst msg = (d.message || \"\").toLowerCase();\nif (action === \"daily_report\") { d._validation = {valid:true,missing:[]}; d._needs_info = false; return [{json:d}]; }\nconst missing = [];\nconst hasId = pl.op_id || pl.card_id;\nconst hasMsg = msg.length > 5;\nconst hasMats = (pl.materials || []).length > 0;\n\nconst isProdRelated = hasId || /op\\b|produção|producao|kanban|card|fábrica|fabrica|chapa|atrasado|material|chapas|peça|peca|lote|máquina|maquina/.test(msg);\n\nif (!isProdRelated) {\n  missing.push(\"production_context_not_detected\");\n}\nif (action === \"detect_missing_material\" && !hasMats && !/falta|material|chapa|comprar/.test(msg)) missing.push(\"materials\");\nif (!hasId && !hasMsg) missing.push(\"op_id_or_card_id_or_message\");\n\nd._validation = {valid: missing.length === 0, missing};\nd._needs_info = missing.length > 0;\nreturn [{json: d}];"
+      },
+      "id": "n02",
+      "name": "Validate Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        608,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "conditions": [
+            {
+              "leftValue": "={{ $json._needs_info }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "notEquals"
+              }
+            }
+          ],
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          }
+        },
+        "options": {}
+      },
+      "id": "n03",
+      "name": "Check Needs Info",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        864,
+        608
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._status = \"needs_info\";\nconst miss = (d._validation ? d._validation.missing : null) || [];\nd._clarification = {questions: miss.map(function(m){return \"Informar \" + m + \" para continuar\";}), missing: miss};\nreturn [{json: d}];"
+      },
+      "id": "n04",
+      "name": "Format Needs Info",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        752
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst now = new Date();\nconst opId = pl.op_id || (\"OP-MOCK-\" + Math.random().toString(36).substr(2,6).toUpperCase());\nconst cardId = pl.card_id || (\"CARD-MOCK-\" + Math.random().toString(36).substr(2,6).toUpperCase());\nconst deadlineStr = pl.deadline || \"\";\nconst deadline = deadlineStr ? new Date(deadlineStr) : new Date(now.getTime() + 3 * 86400000);\nconst daysUntil = Math.round((deadline - now) / 86400000);\nconst chk = pl.checklist && pl.checklist.length > 0 ? pl.checklist : [{item:\"Montagem\",done:true},{item:\"Teste\",done:false},{item:\"Pintura\",done:false}];\nconst tot = chk.length;\nconst done = chk.filter(function(i){return i.done;}).length;\nconst pct = Math.round((done / tot) * 100);\nif (d.runtime_mode === \"PORTAL\") {\n  d._op_context = {note:\"TODO: GET /api/producao/ops/\" + (pl.op_id||\"\") + \" e GET /api/kanban/cards/\" + (pl.card_id||\"\"), op_id:pl.op_id, card_id:pl.card_id};\n} else {\n  d._op_context = {\n    op_id: opId, card_id: cardId,\n    title: pl.title || (\"OP \" + opId + \" - Producao\"),\n    status: pl.status || \"in_progress\",\n    column: pl.column || \"Em Producao\",\n    responsible: pl.responsible || \"\",\n    deadline: deadline.toISOString().split(\"T\")[0],\n    days_until_deadline: daysUntil,\n    is_overdue: daysUntil < 0,\n    checklist: chk, checklist_total: tot, checklist_done: done, checklist_percent: pct,\n    materials: pl.materials || [],\n    board_type: pl.board_type || \"producao\",\n    customer_impact_possible: /urgente|cliente|entrega|prazo/.test((pl.description || d.message || \"\").toLowerCase())\n  };\n}\nreturn [{json: d}];"
+      },
+      "id": "n05",
+      "name": "Fetch Context",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst ctx = d._op_context || {};\nconst pl = d.payload || {};\nconst msg = (d.message || \"\").toLowerCase();\nconst mats = ctx.materials || pl.materials || [];\nconst hasMissingMat = mats.some(function(m){ return [\"missing\",\"pending\",\"out_of_stock\",\"faltando\"].includes((m.status||\"\").toLowerCase()); }) ||\n  /falta|sem chapa|precisa comprar|material pendente/.test(msg);\nconst hasNoResp = !ctx.responsible || ctx.responsible === \"\";\nconst hasNoDeadline = !pl.deadline && ctx.days_until_deadline === undefined;\nconst isBlocked = (pl.status||\"\").toLowerCase().includes(\"block\") || /bloqueado|blocked/.test(msg);\nconst daysInCol = ((pl.metadata || {}).days_in_column) || 0;\nd._analysis = {\n  op_id: ctx.op_id, card_id: ctx.card_id, title: ctx.title, status: ctx.status,\n  responsible: ctx.responsible, deadline: ctx.deadline,\n  days_until_deadline: ctx.days_until_deadline,\n  checklist_percent: ctx.checklist_percent || 0,\n  is_overdue: ctx.is_overdue === true,\n  is_blocked: isBlocked,\n  has_missing_material: hasMissingMat,\n  has_no_responsible: hasNoResp,\n  has_no_deadline: hasNoDeadline,\n  has_pending_checklist: (ctx.checklist_percent || 0) < 100,\n  customer_impact_possible: ctx.customer_impact_possible || false,\n  stalled_in_column: daysInCol > 3,\n  summary: \"OP \" + (ctx.op_id||\"\") + \" | status=\" + (ctx.status||\"\") +\n    \" | checklist=\" + (ctx.checklist_percent||0) + \"%\" +\n    \" | prazo=\" + (ctx.is_overdue ? \"ATRASADO\" : (ctx.days_until_deadline + \" dias\")) +\n    \" | material=\" + (hasMissingMat ? \"FALTANDO\" : \"OK\") +\n    \" | resp=\" + (hasNoResp ? \"NAO DEFINIDO\" : (ctx.responsible||\"OK\"))\n};\nreturn [{json: d}];"
+      },
+      "id": "n06",
+      "name": "Analyze OP Card",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst a = d._analysis || {};\nconst msg = (d.message || \"\").toLowerCase();\nconst pl = d.payload || {};\nconst descLower = ((pl.title || \"\") + \" \" + (pl.description || \"\")).toLowerCase();\nconst isEX = /\\bex\\b|area classificada|inmetro|explosao|explosivo/.test(msg) || /\\bex\\b|area classificada|inmetro/.test(descLower);\nlet risk = \"low\";\nif (isEX) {\n  risk = \"critical\";\n} else if (a.is_overdue || a.has_missing_material) {\n  risk = \"high\";\n} else if (a.has_no_responsible || a.has_no_deadline || a.stalled_in_column || a.is_blocked) {\n  risk = \"medium\";\n} else if ((a.days_until_deadline !== undefined && a.days_until_deadline <= 1 && a.checklist_percent < 80)) {\n  risk = \"medium\";\n} else if (a.has_pending_checklist || a.customer_impact_possible) {\n  risk = \"medium\";\n}\nd._risk_level = risk;\nd._requires_approval = isEX || (d.action === \"move_card_request\" && [\"medium\",\"high\",\"critical\"].includes(risk));\nd._policy = {\n  comment_allowed: true, alert_allowed: true, compras_request_allowed: true,\n  auto_move_allowed: pl.auto_move_allowed === true && pl.approved === true,\n  finalize_op_blocked: true,\n  change_deadline_requires_approval: true,\n  is_ex_area: isEX\n};\nreturn [{json: d}];"
+      },
+      "id": "n07",
+      "name": "Risk Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1600,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "daily_report",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "b9a3d8b0-bc16-474f-93ea-5d6ee5623ec3"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "move_card_request",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "9b0df7e2-567f-4261-a9b0-baba719cb01e"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "event_intake",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "774a9b97-b937-4f7c-909e-2e73f8cbec89"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "analyze_op",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "0b5039b1-52eb-49a6-9dd2-56f8b4696cef"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "detect_delay",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "4b2bb0a8-a3a2-405d-a5ca-c9b591d18281"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "detect_missing_material",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "29cb546e-f7c3-45ae-904c-02d5781f29ae"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "sync_compras",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "dc5eeeb3-a00a-4f32-8177-f267564577f7"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "create_alert",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "bd6f3e66-8a19-42e9-840d-924815ffefb2"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 3
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.action }}",
+                    "rightValue": "comment_card",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "d5684a01-273c-47a6-a145-3c6de7c91701"
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "n08",
+      "name": "Switch Action",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1856,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst ops = pl.ops || [\n  {op_id:\"OP-001\",status:\"in_progress\",responsible:\"Carlos\",days_until_deadline:2,checklist_percent:60,has_missing_material:false},\n  {op_id:\"OP-002\",status:\"in_progress\",responsible:\"\",days_until_deadline:-1,checklist_percent:40,has_missing_material:true},\n  {op_id:\"OP-003\",status:\"done\",responsible:\"Ana\",days_until_deadline:5,checklist_percent:100,has_missing_material:false},\n  {op_id:\"OP-004\",status:\"in_progress\",responsible:\"Bruno\",days_until_deadline:0,checklist_percent:30,has_missing_material:false}\n];\nconst atrasadas = ops.filter(function(o){return o.days_until_deadline < 0 && o.status !== \"done\";});\nconst semResp = ops.filter(function(o){return !o.responsible || o.responsible === \"\";});\nconst comMat = ops.filter(function(o){return o.has_missing_material;});\nconst prazoHj = ops.filter(function(o){return o.days_until_deadline === 0 && o.status !== \"done\";});\nd._daily_report = {\n  total_ops: ops.length, ops_atrasadas: atrasadas.length,\n  ops_sem_responsavel: semResp.length, ops_material_pendente: comMat.length,\n  ops_prazo_hoje: prazoHj.length,\n  atrasadas: atrasadas.map(function(o){return o.op_id;}),\n  sem_responsavel: semResp.map(function(o){return o.op_id;}),\n  material_pendente: comMat.map(function(o){return o.op_id;}),\n  acoes_recomendadas: [\n    atrasadas.length > 0 ? \"Verificar OPs atrasadas: \" + atrasadas.map(function(o){return o.op_id;}).join(\", \") : null,\n    semResp.length > 0 ? \"Definir responsavel para: \" + semResp.map(function(o){return o.op_id;}).join(\", \") : null,\n    comMat.length > 0 ? \"Acionar compras para: \" + comMat.map(function(o){return o.op_id;}).join(\", \") : null\n  ].filter(function(x){return x !== null;}),\n  generated_at: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: GET /api/producao/ops?status=active\" : \"MOCK: daily_report simulado\"\n};\nd._status = \"daily_report_ready\";\nreturn [{json: d}];"
+      },
+      "id": "n09",
+      "name": "Daily Report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst pl = d.payload || {};\nconst policy = d._policy || {};\nif (policy.auto_move_allowed && pl.approved === true) {\n  d._move_result = {\n    action: \"move_card_placeholder\",\n    card_id: pl.card_id,\n    target_column: (pl.metadata && pl.metadata.target_column) ? pl.metadata.target_column : \"Proximo_Estagio\",\n    note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/kanban/cards/{id}/move\" : \"MOCK: move placeholder - nao mover real\"\n  };\n  d._status = \"move_card_placeholder\";\n} else {\n  d._requires_approval = true;\n  d._approval_id = \"appr_prod_\" + Math.random().toString(36).substr(2,8);\n  d._status = \"approval_pending\";\n  d._blocked_reason = \"Mover card requer aprovacao ou auto_move_allowed=true + approved=true\";\n}\nreturn [{json: d}];"
+      },
+      "id": "n10",
+      "name": "Move Card Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst a = d._analysis || {};\nconst pl = d.payload || {};\nconst msg = (d.message || \"\").toLowerCase();\nconst mats = (pl.materials || []).filter(function(m){ return [\"missing\",\"pending\",\"out_of_stock\",\"faltando\"].includes((m.status||\"\").toLowerCase()); });\nconst hasMissingMat = a.has_missing_material || false;\n// Alerts\nconst alerts = [];\nif (a.is_overdue) alerts.push({alert_type:\"delay\",severity:\"high\",title:\"OP Atrasada\",message:\"OP \" + (a.op_id||\"\") + \" atrasada. Prazo: \" + (a.deadline||\"\"),responsible:a.responsible,op_id:a.op_id,card_id:a.card_id});\nif (hasMissingMat) alerts.push({alert_type:\"missing_material\",severity:\"high\",title:\"Material Faltando\",message:\"Material pendente para OP \" + (a.op_id||\"\"),responsible:a.responsible,op_id:a.op_id,card_id:a.card_id});\nif (a.has_no_responsible) alerts.push({alert_type:\"no_responsible\",severity:\"medium\",title:\"Sem Responsavel\",message:\"OP \" + (a.op_id||\"\") + \" sem responsavel\",op_id:a.op_id,card_id:a.card_id});\nif (a.has_no_deadline) alerts.push({alert_type:\"no_deadline\",severity:\"medium\",title:\"Sem Prazo\",message:\"OP \" + (a.op_id||\"\") + \" sem prazo\",op_id:a.op_id,card_id:a.card_id});\nif (d._risk_level === \"critical\") alerts.push({alert_type:\"critical_compliance\",severity:\"critical\",title:\"Alerta Critico EX/INMETRO\",message:\"EX/INMETRO detectado. Revisao obrigatoria.\",op_id:a.op_id,card_id:a.card_id});\nd._alerts = alerts;\nd._alert_result = {alert_count: alerts.length, alert_id: \"alert_mock_\" + Math.random().toString(36).substr(2,8), note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/producao/ops/{id}/alerts\" : \"MOCK: \" + alerts.length + \" alertas\"};\n// Kanban Comment\nconst lines = [\"Analise [\" + d.correlation_id + \"]\"];\nlines.push(a.summary || \"Analise realizada\");\nif (alerts.length > 0) lines.push(\"Alertas: \" + alerts.map(function(al){return al.alert_type+\"(\"+al.severity+\")\";}).join(\", \"));\nif (hasMissingMat) lines.push(\"Material faltando - requisicao de compra preparada.\");\nif (a.is_overdue) lines.push(\"ATENCAO: OP atrasada.\");\nif (d._risk_level === \"critical\") lines.push(\"CRITICO: Revisao obrigatoria.\");\nd._kanban_comment = {comment_text: lines.join(\" | \"), card_id: a.card_id, prepared_by: \"PRODUCAO Agent\", prepared_at: new Date().toISOString(), note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/kanban/cards/{id}/comments\" : \"MOCK: comment_prepared=true\"};\n// Compras Integration\nif (hasMissingMat) {\n  const matDesc = mats.length > 0 ? mats.map(function(m){return m.description||m.name||\"material\";}).join(\", \") : (d.message || \"material para OP\");\n  d._compras_payload = {\n    runtime_mode: d.runtime_mode, correlation_id: d.correlation_id, request_id: d.request_id,\n    source: \"producao\", user: d.user,\n    message: \"Comprar/cotar material para OP \" + (a.op_id || pl.op_id || \"\"),\n    action: \"intake\",\n    payload: {\n      op_id: a.op_id || pl.op_id || \"\",\n      item_description: matDesc,\n      quantity: mats.length > 0 ? (mats[0].quantity || \"1\") : \"1\",\n      unit: mats.length > 0 ? (mats[0].unit || \"un\") : \"un\",\n      deadline: a.deadline || pl.deadline || \"\",\n      approved: false,\n      customer: {company_name: \"Producao Interna\", email: \"producao@portal.example\"}\n    }\n  };\n  d._compras_result = {triggered: true, workflow_id: \"WORKFLOW_PURCHASES_AGENT\", note: d.runtime_mode === \"PORTAL\" ? \"TODO: Execute Workflow WORKFLOW_PURCHASES_AGENT\" : \"MOCK: compras_triggered=true\"};\n  d._status = \"compras_triggered\";\n} else {\n  d._status = alerts.length > 0 ? \"alert_created\" : \"analyzed\";\n}\nreturn [{json: d}];"
+      },
+      "id": "n11",
+      "name": "Main Process",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2112,
+        704
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst evtMap = {\n  \"event_intake\": \"producao.event_received\",\n  \"analyze_op\": \"producao.op_analyzed\",\n  \"detect_delay\": \"producao.delay_detected\",\n  \"detect_missing_material\": \"producao.missing_material_detected\",\n  \"sync_compras\": \"producao.compras_triggered\",\n  \"create_alert\": \"producao.alert_created\",\n  \"comment_card\": \"producao.kanban_comment_prepared\",\n  \"daily_report\": \"producao.daily_report_ready\",\n  \"move_card_request\": \"producao.approval_requested\"\n};\nd._audit = {\n  event_type: evtMap[d.action] || \"producao.processed\",\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  action: d.action, status: d._status,\n  risk_level: d._risk_level || \"low\",\n  runtime_mode: d.runtime_mode, timestamp: new Date().toISOString(),\n  note: d.runtime_mode === \"PORTAL\" ? \"TODO: POST /api/automation/audit\" : \"MOCK: audit_logged=true\"\n};\nreturn [{json: d}];"
+      },
+      "id": "n12",
+      "name": "Audit Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2352,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nconst st = d._status || \"success\";\nreturn [{json: {\n  correlation_id: d.correlation_id, request_id: d.request_id,\n  status: st, agent: \"producao\",\n  workflow: \"PRODUCAO - Kanban OP Agent\",\n  summary: d._blocked_reason || d._approval_note || (d._analysis ? d._analysis.summary : d.message) || st,\n  data: {\n    op: d._op_context || {}, card: d._op_context || {},\n    analysis: d._analysis || {},\n    risks: d._risk_level ? [d._risk_level] : [],\n    alerts: d._alerts || [],\n    material_request: d._compras_payload || {},\n    kanban_comment: d._kanban_comment || {},\n    compras_payload: d._compras_payload || {},\n    daily_report: d._daily_report || {},\n    move_result: d._move_result || {},\n    approval_id: d._approval_id || null,\n    portal_synced: false\n  },\n  missing_fields: (d._validation ? d._validation.missing : null) || [],\n  requires_approval: d._requires_approval || false,\n  approval_id: d._approval_id || null,\n  risk_level: d._risk_level || \"low\",\n  next_action: st === \"analyzed\" ? \"create_alert\"\n    : st === \"alert_created\" ? \"comment_card\"\n    : st === \"compras_triggered\" ? \"await_compras_response\"\n    : st === \"comment_prepared\" ? \"check_compras\"\n    : st === \"approval_pending\" ? \"wait_for_approval\"\n    : st === \"daily_report_ready\" ? \"review_report\"\n    : st === \"needs_info\" ? \"request_more_info\"\n    : \"none\"\n}}];"
+      },
+      "id": "n13",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2608,
+        512
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $input.first().json;\nd._error_note = \"TODO: vincular WORKFLOW_ERROR_AUDIT nas Settings\";\nd._status = \"failed\";\nreturn [{json: d}];"
+      },
+      "id": "n14",
+      "name": "Error Handler",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        352,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## TESTE\nManual Trigger com dados simulados.\nNao chama Portal.\nNao move card real.\n",
+        "height": 220,
+        "width": 320
+      },
+      "id": "s01",
+      "name": "Sticky TESTE",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        352
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## MOCK\nWebhook POST /webhook/vesper/producao/kanban-op\nruntime_mode=MOCK\nSimula OP, card, checklist, materiais e alertas.",
+        "height": 180,
+        "width": 320
+      },
+      "id": "s02",
+      "name": "Sticky MOCK",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## PORTAL\nruntime_mode=PORTAL\nBase: $env.VESPER_PORTAL_BASE_URL\nToken: $env.VESPER_PORTAL_API_KEY\nNao alterar OP/card critico sem aprovacao.",
+        "height": 180,
+        "width": 320
+      },
+      "id": "s03",
+      "name": "Sticky PORTAL",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        784
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Gateway -> Producao\nGateway ID: WORKFLOW_GATEWAY_SUPERVISOR\nFuturo: Execute Workflow ou POST /webhook/vesper/producao/kanban-op",
+        "height": 140,
+        "width": 320
+      },
+      "id": "s04",
+      "name": "Sticky Gateway",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        992
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Producao -> Compras\nCompras ID: WORKFLOW_PURCHASES_AGENT\nFuturo: Execute Workflow ou POST /webhook/vesper/compras/procure-to-pay\nPayload: compras_payload do resultado",
+        "width": 320
+      },
+      "id": "s05",
+      "name": "Sticky Compras",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        1152
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Approval Center\nID: WORKFLOW_APPROVAL_CENTER\nAcionado em: move_card_request, EX/INMETRO\napproval_type: critical_kanban_move|ex_area_validation",
+        "width": 320
+      },
+      "id": "s06",
+      "name": "Sticky Approval",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        1328
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Error Audit\nID: WORKFLOW_ERROR_AUDIT\nSettings > Error Workflow: vincular a este ID\nOu POST /webhook/vesper/core/error-audit",
+        "height": 140,
+        "width": 320
+      },
+      "id": "s07",
+      "name": "Sticky Error",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        1504
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Endpoints Futuros Portal\nGET /api/producao/ops/{id}\nGET /api/kanban/cards/{id}\nPOST /api/kanban/cards/{id}/comments\nPOST /api/producao/ops/{id}/material-request\nPOST /api/producao/ops/{id}/alerts\nPOST /api/kanban/cards/{id}/move\nPOST /api/notifications\nPOST /api/automation/audit",
+        "height": 220,
+        "width": 320
+      },
+      "id": "s08",
+      "name": "Sticky Endpoints",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -288,
+        1664
+      ]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook Producao": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Normalize Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Error Handler",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Error Handler": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Input": {
+      "main": [
+        [
+          {
+            "node": "Validate Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Input": {
+      "main": [
+        [
+          {
+            "node": "Check Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Check Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Fetch Context",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Format Needs Info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Needs Info": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch Context": {
+      "main": [
+        [
+          {
+            "node": "Analyze OP Card",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analyze OP Card": {
+      "main": [
+        [
+          {
+            "node": "Risk Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Risk Classification": {
+      "main": [
+        [
+          {
+            "node": "Switch Action",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Switch Action": {
+      "main": [
+        [
+          {
+            "node": "Daily Report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Move Card Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Main Process",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily Report": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Move Card Request": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Main Process": {
+      "main": [
+        [
+          {
+            "node": "Audit Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Audit Log": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "2f62efa0-fd40-4fa2-b271-d2aa6fd32162",
+  "tags": []
+}

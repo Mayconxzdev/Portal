@@ -1,0 +1,820 @@
+{
+  "updatedAt": "2026-05-20T17:43:17.761Z",
+  "createdAt": "2026-05-20T16:34:30.689Z",
+  "name": "AI - PORTAL VESPER - Agente de Compras e Cotações",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "path": "vesper/ai/compras-cotacoes",
+        "httpMethod": "POST",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "388a9374-4f5c-4001-ac02-9e10c4238e3d",
+      "name": "Webhook Compras AI Seguro",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        0
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "7696f7ac-3514-4065-b16e-755f0d06a0af",
+      "name": "Iniciar Agente",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.pedido }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é o Agente de Compras do Portal Vesper, especializado em cotações e análise de fornecedores.\n\nFERRAMENTAS DISPONÍVEIS:\n- Consultar Catálogo Portal Vesper: busca produtos no catálogo\n- Buscar Fornecedores Portal Vesper: lista fornecedores ativos para um produto\n- Solicitar Cotação a Fornecedor: envia pedido de cotação\n- Calculadora de Análise: calcula custos, margens e comparações\n- Verificar Histórico de Compras: consulta compras anteriores\n\nREGRAS OBRIGATÓRIAS:\n1. NUNCA aprovar compras automaticamente - sempre marcar requer_aprovacao=true\n2. NUNCA escolher fornecedor final sem aprovação humana\n3. Fornecedores novos (sem histórico) SEMPRE requerem aprovação\n4. Valores acima de R$ 1.000 SEMPRE requerem aprovação\n5. Diferenças de preço > 20% entre fornecedores requerem aprovação\n6. Sempre criar rascunho de pedido, nunca pedido final\n\nFLUXO DE TRABALHO:\n1. Entender o pedido do usuário\n2. Buscar produto no catálogo\n3. Identificar fornecedores qualificados\n4. Solicitar cotações\n5. Verificar histórico de compras\n6. Calcular e comparar custos totais\n7. Analisar prazo, confiabilidade e risco\n8. Gerar recomendação com justificativa\n9. Criar rascunho de pedido\n10. Marcar para aprovação humana\n\nSAÍDA: Retorne JSON estruturado com análise completa, recomendação e rascunho.",
+          "maxIterations": 15,
+          "returnIntermediateSteps": true
+        }
+      },
+      "id": "c28e529f-9955-4b3d-8908-d5f7708c563f",
+      "name": "Agente de Compras e Cotações",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        784,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "df227600-ba70-412e-aebb-1c531c9c4ea2",
+      "name": "Modelo OpenAI GPT-5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        464,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "q",
+              "value": "={{ $fromAI(\"searchTerm\", \"Termo de busca do produto\") }}"
+            },
+            {
+              "name": "limit",
+              "value": "10"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Consultar Catálogo Portal Vesper na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "95030fcf-a4ee-4ade-8f24-05ce11db8707",
+      "name": "Consultar Catálogo Portal Vesper",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        592,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "product_id",
+              "value": "={{ $fromAI(\"productId\", \"ID do produto\") }}"
+            },
+            {
+              "name": "status",
+              "value": "active"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Buscar Fornecedores Portal Vesper na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "c7c1c91a-497d-4661-b399-db63701ed9e9",
+      "name": "Buscar Fornecedores Portal Vesper",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        720,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"supplier_id\": $fromAI(\"supplierId\", \"ID do fornecedor\"), \"product_id\": $fromAI(\"productId\", \"ID do produto\"), \"quantity\": $fromAI(\"quantity\", \"Quantidade solicitada\"), \"requested_by\": \"AI Agent\", \"notes\": $fromAI(\"notes\", \"Observações adicionais\") } }}",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Solicitar Cotação a Fornecedor na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "ce07d573-72b0-42b5-ba1b-d57eae4462e4",
+      "name": "Solicitar Cotação a Fornecedor",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        848,
+        528
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e0632faf-e0c8-4e7f-b4e1-0713ccbdbd5a",
+      "name": "Calculadora de Análise",
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        976,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "product_id",
+              "value": "={{ $fromAI(\"productId\", \"ID do produto\") }}"
+            },
+            {
+              "name": "limit",
+              "value": "5"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Verificar Histórico de Compras na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "6652a3bd-f9d7-4d18-bfe5-eb4625354cbb",
+      "name": "Verificar Histórico de Compras",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1104,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "acao": "cotacao_solicitada",
+          "produto": {
+            "id": "PROD-123",
+            "nome": "Parafuso M8",
+            "quantidade": 100
+          },
+          "fornecedores": [
+            {
+              "id": "FORN-001",
+              "nome": "Fornecedor A",
+              "preco_unitario": 0.5,
+              "prazo_dias": 7,
+              "score_confianca": 0.95
+            },
+            {
+              "id": "FORN-002",
+              "nome": "Fornecedor B",
+              "preco_unitario": 0.48,
+              "prazo_dias": 10,
+              "score_confianca": 0.88
+            }
+          ],
+          "analise": {
+            "melhor_custo": "FORN-002",
+            "melhor_prazo": "FORN-001",
+            "recomendacao": "FORN-001",
+            "justificativa": "Melhor equilíbrio entre preço, prazo e confiabilidade"
+          },
+          "requer_aprovacao": true,
+          "motivo_aprovacao": "Valor total acima de R$ 1.000",
+          "valor_total_estimado": 1250,
+          "rascunho_pedido_id": "DRAFT-2024-001"
+        }
+      },
+      "id": "c72b2640-16a9-43bf-aef6-3410b32bf114",
+      "name": "Parser de Saída Estruturada",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1232,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "acao",
+              "name": "acao",
+              "value": "={{ $json.output.acao }}",
+              "type": "string"
+            },
+            {
+              "id": "produto_nome",
+              "name": "produto_nome",
+              "value": "={{ $json.output.produto.nome }}",
+              "type": "string"
+            },
+            {
+              "id": "quantidade",
+              "name": "quantidade",
+              "value": "={{ $json.output.produto.quantidade }}",
+              "type": "number"
+            },
+            {
+              "id": "requer_aprovacao",
+              "name": "requer_aprovacao",
+              "value": "={{ $json.output.requer_aprovacao }}",
+              "type": "boolean"
+            },
+            {
+              "id": "motivo_aprovacao",
+              "name": "motivo_aprovacao",
+              "value": "={{ $json.output.motivo_aprovacao }}",
+              "type": "string"
+            },
+            {
+              "id": "valor_total",
+              "name": "valor_total",
+              "value": "={{ $json.output.valor_total_estimado }}",
+              "type": "number"
+            },
+            {
+              "id": "recomendacao",
+              "name": "recomendacao",
+              "value": "={{ $json.output.analise.recomendacao }}",
+              "type": "string"
+            },
+            {
+              "id": "justificativa",
+              "name": "justificativa",
+              "value": "={{ $json.output.analise.justificativa }}",
+              "type": "string"
+            },
+            {
+              "id": "rascunho_id",
+              "name": "rascunho_id",
+              "value": "={{ $json.output.rascunho_pedido_id }}",
+              "type": "string"
+            },
+            {
+              "id": "fornecedores",
+              "name": "fornecedores",
+              "value": "={{ $json.output.fornecedores }}",
+              "type": "array"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f44f8358-92da-42dc-bbe0-48fa279d0382",
+      "name": "Extrair Dados da Análise",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1440,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "79edf6a2-8cd7-413e-99d9-a1f91258f301",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1664,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.requer_aprovacao }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6e308966-8fed-4bdb-ae0c-d0b9d84f45c3",
+      "name": "Requer Aprovação?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1888,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/automation/approvals",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"action_type\": $json.acao_original || $json.acao || \"unknown\", \"description\": $json.detalhes || $json.assunto || \"Aprovação necessária\", \"requester\": $json.user || \"n8n_agent\", \"correlation_id\": $json.correlation_id || $execution.id, \"metadata\": $json } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "1f304d36-26f3-4f39-a645-b7c0f504a2d1",
+      "name": "Solicitar Aprovação por Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2112,
+        208
+      ],
+      "notes": "CONVERTIDO: Email sendAndWait → POST /api/automation/approvals"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "aprovado",
+              "name": "aprovado",
+              "value": "={{ $json.approved }}",
+              "type": "boolean"
+            },
+            {
+              "id": "aprovador",
+              "name": "aprovador",
+              "value": "={{ $json.approver }}",
+              "type": "string"
+            },
+            {
+              "id": "data_aprovacao",
+              "name": "data_aprovacao",
+              "value": "={{ $json.timestamp }}",
+              "type": "string"
+            },
+            {
+              "id": "rascunho_id",
+              "name": "rascunho_id",
+              "value": "={{ $(\"Extrair Dados da Análise\").item.json.rascunho_id }}",
+              "type": "string"
+            },
+            {
+              "id": "produto_nome",
+              "name": "produto_nome",
+              "value": "={{ $(\"Extrair Dados da Análise\").item.json.produto_nome }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "93162f41-8e60-4b00-96dd-0c28d871ecb5",
+      "name": "Processar Resposta de Aprovação",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2336,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "PATCH",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"status\": $json.aprovado ? \"aprovado\" : \"rejeitado\", \"approved_by\": $json.aprovador, \"approved_at\": $json.data_aprovacao } }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "73a0ec89-1c8a-40ee-8ec0-8d02d8843a95",
+      "name": "Atualizar Status no Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2560,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "0bc461b3-825f-45b6-ba01-ac57cae875ee",
+      "name": "Registrar Decisão",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2784,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "status",
+              "name": "status",
+              "value": "processado_automaticamente",
+              "type": "string"
+            },
+            {
+              "id": "observacao",
+              "name": "observacao",
+              "value": "Cotação processada sem necessidade de aprovação",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "be07c0ad-73b6-4320-a72b-8bd157912d3b",
+      "name": "Registrar Cotação Automática",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2784,
+        400
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "c8891324-6e4d-4794-bbe2-8c4e56233684",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Iniciar Agente": {
+      "main": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de Compras e Cotações": {
+      "main": [
+        [
+          {
+            "node": "Extrair Dados da Análise",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI GPT-5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Catálogo Portal Vesper": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Fornecedores Portal Vesper": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar Cotação a Fornecedor": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculadora de Análise": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Histórico de Compras": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser de Saída Estruturada": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Dados da Análise": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Auditoria": {
+      "main": [
+        [
+          {
+            "node": "Requer Aprovação?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requer Aprovação?": {
+      "main": [
+        [
+          {
+            "node": "Solicitar Aprovação por Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Cotação Automática",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar Aprovação por Email": {
+      "main": [
+        [
+          {
+            "node": "Processar Resposta de Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processar Resposta de Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Status no Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Status no Portal": {
+      "main": [
+        [
+          {
+            "node": "Registrar Decisão",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Decisão": {
+      "main": [
+        []
+      ]
+    },
+    "Registrar Cotação Automática": {
+      "main": [
+        []
+      ]
+    },
+    "Webhook Compras AI Seguro": {
+      "main": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Agente de Compras e Cotações",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "f2d54099-2b04-411d-898e-dd38e6ee8b02",
+  "tags": []
+}

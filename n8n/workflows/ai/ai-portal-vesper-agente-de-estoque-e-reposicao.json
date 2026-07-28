@@ -1,0 +1,875 @@
+{
+  "updatedAt": "2026-05-20T17:43:16.179Z",
+  "createdAt": "2026-05-20T16:34:32.961Z",
+  "name": "AI - PORTAL VESPER - Agente de Estoque e Reposição",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      },
+      "id": "d22dfe11-1eae-4c54-bb5c-676922ce03ae",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "bf73d6be-7bee-4581-a112-146abf46882a",
+      "name": "Consultar Estoque",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.quantidade }}",
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              },
+              "rightValue": "={{ $json.minimo }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "40337219-51ec-4c77-b4f4-9ba95ad418a8",
+      "name": "Filtrar Abaixo do Mínimo",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.3,
+      "position": [
+        688,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "processamento_concluido",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "dataHora",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "2107d80a-3c4b-43bd-b8bc-923d8bf52e50",
+      "name": "Finalizar Loop",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1136,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "requisicoes",
+        "options": {}
+      },
+      "id": "0fcaf87a-a973-45b5-b2e1-0fc6f8db8ba1",
+      "name": "Relatório Final",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        1360,
+        1008
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d41a9cbe-957c-4f0d-ac88-9ac9477804aa",
+      "name": "Consultar Ordens de Produção",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1136,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const estoque = $input.first().json;\nconst ops = $('Consultar Ordens de Produção').all().map(i => i.json);\n\nconst opsDoMaterial = ops.filter(op => op.material === estoque.id);\nconst demandaTotal = opsDoMaterial.reduce((sum, op) => sum + op.quantidade, 0);\nconst deficit = estoque.quantidade - demandaTotal;\nconst quantidadeReposicao = Math.max(estoque.maximo - estoque.quantidade, Math.abs(deficit));\n\nreturn [{\n  json: {\n    material: estoque.id,\n    nome: estoque.nome,\n    quantidadeAtual: estoque.quantidade,\n    minimo: estoque.minimo,\n    maximo: estoque.maximo,\n    demandaOPs: demandaTotal,\n    deficit: deficit,\n    quantidadeReposicao: quantidadeReposicao,\n    opsVinculadas: opsDoMaterial.length,\n    opsDetalhes: opsDoMaterial,\n    localizacao: estoque.localizacao,\n    unidade: estoque.unidade\n  }\n}];"
+      },
+      "id": "44b2a223-b5c0-4518-9e48-05ca67c10536",
+      "name": "Cruzar Estoque com OPs",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1360,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Analise a situação de estoque do material {{ $json.nome }} ({{ $json.material }}):\n\nQuantidade atual: {{ $json.quantidadeAtual }} {{ $json.unidade }}\nMínimo: {{ $json.minimo }} {{ $json.unidade }}\nMáximo: {{ $json.maximo }} {{ $json.unidade }}\nDemanda de OPs: {{ $json.demandaOPs }} {{ $json.unidade }}\nDéficit: {{ $json.deficit }} {{ $json.unidade }}\nOPs vinculadas: {{ $json.opsVinculadas }}\nLocalização: {{ $json.localizacao }}\n\nClassifique a urgência (critica/alta/media/baixa), justifique, sugira quantidade de reposição, prazo de entrega, fornecedor e custo estimado.",
+        "hasOutputParser": true,
+        "options": {}
+      },
+      "id": "47381d62-aaad-4251-89aa-18244b4e511a",
+      "name": "Agente de Análise de Urgência",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1712,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "eb76b857-091f-4319-885a-645e1cc2f6ae",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1584,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Ferramenta Consultar Estoque na malha Portal Vesper."
+      },
+      "id": "3e63d272-3977-491e-bac0-5f376220cc09",
+      "name": "Ferramenta Consultar Estoque",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1712,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {
+          "timeout": 30000
+        },
+        "toolDescription": "Consulta controlada para Ferramenta Consultar Fornecedores na malha Portal Vesper."
+      },
+      "id": "a641ecaf-6b33-40f4-94ce-c2abc24a1bac",
+      "name": "Ferramenta Consultar Fornecedores",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        1840,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "urgencia": "critica",
+          "justificativa": "Déficit de 17 unidades com 2 OPs de alta prioridade iniciando em 5 dias",
+          "quantidadeSugerida": 92,
+          "prazoEntrega": "2025-01-19",
+          "fornecedorSugerido": "Fornecedor A",
+          "custoEstimado": 4600,
+          "observacoes": "Reposição crítica - aprovar imediatamente"
+        }
+      },
+      "id": "6ba55a94-ec69-4dd8-97ad-fdbbc4e6f7f5",
+      "name": "Parser Estruturado",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1968,
+        720
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "material",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.material }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "nome",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.nome }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "quantidadeAtual",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.quantidadeAtual }}",
+              "type": "number"
+            },
+            {
+              "id": "4",
+              "name": "minimo",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.minimo }}",
+              "type": "number"
+            },
+            {
+              "id": "5",
+              "name": "maximo",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.maximo }}",
+              "type": "number"
+            },
+            {
+              "id": "6",
+              "name": "demandaOPs",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.demandaOPs }}",
+              "type": "number"
+            },
+            {
+              "id": "7",
+              "name": "deficit",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.deficit }}",
+              "type": "number"
+            },
+            {
+              "id": "8",
+              "name": "opsVinculadas",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.opsVinculadas }}",
+              "type": "number"
+            },
+            {
+              "id": "9",
+              "name": "urgencia",
+              "value": "={{ $json.output.urgencia }}",
+              "type": "string"
+            },
+            {
+              "id": "10",
+              "name": "justificativa",
+              "value": "={{ $json.output.justificativa }}",
+              "type": "string"
+            },
+            {
+              "id": "11",
+              "name": "quantidadeSugerida",
+              "value": "={{ $json.output.quantidadeSugerida }}",
+              "type": "number"
+            },
+            {
+              "id": "12",
+              "name": "prazoEntrega",
+              "value": "={{ $json.output.prazoEntrega }}",
+              "type": "string"
+            },
+            {
+              "id": "13",
+              "name": "fornecedorSugerido",
+              "value": "={{ $json.output.fornecedorSugerido }}",
+              "type": "string"
+            },
+            {
+              "id": "14",
+              "name": "custoEstimado",
+              "value": "={{ $json.output.custoEstimado }}",
+              "type": "number"
+            },
+            {
+              "id": "15",
+              "name": "observacoes",
+              "value": "={{ $json.output.observacoes }}",
+              "type": "string"
+            },
+            {
+              "id": "16",
+              "name": "localizacao",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.localizacao }}",
+              "type": "string"
+            },
+            {
+              "id": "17",
+              "name": "unidade",
+              "value": "={{ $('Cruzar Estoque com OPs').item.json.unidade }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7d447ef3-c120-45a4-b6dd-818e434a9cdc",
+      "name": "Combinar Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2176,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.urgencia }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "critica"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "critica"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.urgencia }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "alta"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "alta"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.urgencia }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "media"
+                  }
+                ]
+              },
+              "renameOutput": true,
+              "outputKey": "media"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Baixa"
+        }
+      },
+      "id": "5601d8a9-6439-4c21-be93-f222c6c3b186",
+      "name": "Rotear por Urgência",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        2400,
+        464
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"material\": $json.material, \"nome\": $json.nome, \"quantidade\": $json.quantidadeSugerida, \"urgencia\": $json.urgencia, \"justificativa\": $json.justificativa, \"prazoEntrega\": $json.prazoEntrega, \"fornecedor\": $json.fornecedorSugerido, \"custoEstimado\": $json.custoEstimado, \"status\": \"aguardando_aprovacao\", \"observacoes\": $json.observacoes, \"criadoPor\": \"Agente IA\", \"dataHora\": $now.toISO() } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "9509b364-ceeb-446f-a944-1c63ca3fcef8",
+      "name": "Criar Rascunho Crítico",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2624,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "options": {}
+      },
+      "id": "48168332-7536-4f3e-bcc3-a75e7dd0d035",
+      "name": "Loop Materiais",
+      "type": "n8n-nodes-base.splitInBatches",
+      "typeVersion": 3,
+      "position": [
+        912,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"material\": $json.material, \"nome\": $json.nome, \"quantidade\": $json.quantidadeSugerida, \"urgencia\": $json.urgencia, \"justificativa\": $json.justificativa, \"prazoEntrega\": $json.prazoEntrega, \"fornecedor\": $json.fornecedorSugerido, \"custoEstimado\": $json.custoEstimado, \"status\": \"rascunho\", \"observacoes\": $json.observacoes, \"criadoPor\": \"Agente IA\", \"dataHora\": $now.toISO() } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c605c2e5-20ba-47eb-8ef8-e0553e2f6b72",
+      "name": "Criar Rascunho Alta",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2624,
+        416
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"material\": $json.material, \"nome\": $json.nome, \"quantidade\": $json.quantidadeSugerida, \"urgencia\": $json.urgencia, \"justificativa\": $json.justificativa, \"prazoEntrega\": $json.prazoEntrega, \"fornecedor\": $json.fornecedorSugerido, \"custoEstimado\": $json.custoEstimado, \"status\": \"rascunho\", \"observacoes\": $json.observacoes, \"criadoPor\": \"Agente IA\", \"dataHora\": $now.toISO() } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e922b56d-65c8-4f9b-8469-102a9ae41bf8",
+      "name": "Criar Rascunho Média",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2624,
+        672
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"material\": $json.material, \"nome\": $json.nome, \"quantidade\": $json.quantidadeSugerida, \"urgencia\": $json.urgencia, \"justificativa\": $json.justificativa, \"prazoEntrega\": $json.prazoEntrega, \"fornecedor\": $json.fornecedorSugerido, \"custoEstimado\": $json.custoEstimado, \"status\": \"rascunho\", \"observacoes\": $json.observacoes, \"criadoPor\": \"Agente IA\", \"dataHora\": $now.toISO() } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "c116937b-3b70-4f1b-9d9f-b1cfe51a6668",
+      "name": "Criar Rascunho Baixa",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2624,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "id": "92a6d164-b6e7-495e-81d6-c00fe9f27125",
+      "name": "Consolidar Rascunhos",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2848,
+        480
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/automation/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"tipo\": \"reposicao_estoque\", \"material\": $json.material, \"nome\": $json.nome, \"urgencia\": $json.urgencia, \"quantidade\": $json.quantidade, \"status\": $json.status, \"requisicaoId\": $json.id, \"executadoPor\": \"Agente IA\", \"dataHora\": $now.toISO(), \"workflowId\": $workflow.id, \"executionId\": $execution.id } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "684dee76-8c13-4350-8723-9461970f5d6b",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        3072,
+        512
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "bd002782-754d-493b-a459-f59b1bc337cb",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Agendamento Diário": {
+      "main": [
+        [
+          {
+            "node": "Consultar Estoque",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consultar Estoque": {
+      "main": [
+        [
+          {
+            "node": "Filtrar Abaixo do Mínimo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Filtrar Abaixo do Mínimo": {
+      "main": [
+        [
+          {
+            "node": "Loop Materiais",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Finalizar Loop": {
+      "main": [
+        [
+          {
+            "node": "Relatório Final",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Relatório Final": {
+      "main": [
+        []
+      ]
+    },
+    "Consultar Ordens de Produção": {
+      "main": [
+        [
+          {
+            "node": "Cruzar Estoque com OPs",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Cruzar Estoque com OPs": {
+      "main": [
+        [
+          {
+            "node": "Agente de Análise de Urgência",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente de Análise de Urgência": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente de Análise de Urgência",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ferramenta Consultar Estoque": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Análise de Urgência",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ferramenta Consultar Fornecedores": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente de Análise de Urgência",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Estruturado": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente de Análise de Urgência",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Dados": {
+      "main": [
+        [
+          {
+            "node": "Rotear por Urgência",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Rotear por Urgência": {
+      "main": [
+        [
+          {
+            "node": "Criar Rascunho Crítico",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criar Rascunho Alta",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criar Rascunho Média",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Criar Rascunho Baixa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Rascunho Crítico": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Rascunhos",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Loop Materiais": {
+      "main": [
+        [
+          {
+            "node": "Finalizar Loop",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Consultar Ordens de Produção",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Criar Rascunho Alta": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Rascunhos",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Criar Rascunho Média": {
+      "main": [
+        [
+          {
+            "node": "Loop Materiais",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consolidar Rascunhos",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Criar Rascunho Baixa": {
+      "main": [
+        [
+          {
+            "node": "Loop Materiais",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consolidar Rascunhos",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Consolidar Rascunhos": {
+      "main": [
+        [
+          {
+            "node": "Registrar Auditoria",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Agente de Análise de Urgência",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "26190667-05e8-4bd3-8646-b253c8dc13b5",
+  "tags": []
+}

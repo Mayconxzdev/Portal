@@ -1,0 +1,20 @@
+{
+  "private": true,
+  "engines": {
+    "node": "24.x",
+    "npm": ">=10.8.0"
+  },
+  "dependencies": {
+    "playwright": "^1.61.0"
+  },
+  "name": "portal-vesper",
+  "version": "1.0.0",
+  "description": "Plataforma corporativa modular para operações, governança e automações.",
+  "scripts": {
+    "web:dev": "npm --prefix apps/web run dev",
+    "web:lint": "npm --prefix apps/web run lint",
+    "web:test": "npm --prefix apps/web run test:run",
+    "web:build": "npm --prefix apps/web run build",
+    "web:check": "npm run web:lint && npm run web:test && npm run web:build"
+  }
+}

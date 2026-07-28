@@ -1,0 +1,941 @@
+{
+  "updatedAt": "2026-05-20T17:42:13.268Z",
+  "createdAt": "2026-05-20T16:34:44.419Z",
+  "name": "AI - PORTAL VESPER - Agente Empresarial Central",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "public": true,
+        "initialMessages": "Olá! Sou o Agente Empresarial do Portal Vesper.\n\nPosso ajudar com:\n• Compras e Cotações\n• Propostas Comerciais\n• Produção e Kanban\n• Ordens de Produção (OPs)\n• HelpDesk e TI\n• RH e Financeiro\n• Estoque e Qualidade\n• Arquivos/NAS\n• Aprovações e Relatórios\n\nComo posso ajudar?",
+        "options": {
+          "loadPreviousSession": "memory",
+          "showWelcomeScreen": true,
+          "getStarted": "Iniciar Conversa",
+          "subtitle": "Seu assistente inteligente para gestão empresarial",
+          "title": "Portal Vesper - Agente Empresarial",
+          "responseMode": "streaming"
+        }
+      },
+      "id": "efc06b42-23f1-48bc-8e54-82cec7b14408",
+      "name": "Gatilho Chat Portal Vesper",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "id": "28d0729c-0c4b-4333-b048-1f3a09f0e9e6",
+      "name": "Memória da Conversa",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        320,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é o Agente Empresarial Central do Portal Vesper, especializado em gestão empresarial completa.\n\nMÓDULOS DISPONÍVEIS:\n• Compras: pedidos, fornecedores, cotações\n• Propostas: criação, envio, acompanhamento\n• Produção: planejamento, Kanban, OPs (Ordens de Produção)\n• HelpDesk: tickets, suporte TI\n• RH: funcionários, férias, ponto\n• Financeiro: contas a pagar/receber, fluxo de caixa\n• Estoque: produtos, movimentações, inventário\n• Qualidade: inspeções, não-conformidades\n• Arquivos/NAS: documentos, compartilhamento\n• Aprovações: workflows de aprovação\n• Relatórios: dashboards, análises\n\nFERRAMENTAS DISPONÍVEIS:\n1. Calculadora: cálculos matemáticos\n2. Consulta Portal Vesper: busca dados em tempo real\n3. Busca Dados Específicos: consultas detalhadas por módulo\n\nREGRAS CRÍTICAS DE SEGURANÇA:\n⚠️ AÇÕES QUE EXIGEM APROVAÇÃO HUMANA (requer_aprovacao: true):\n- Compras acima de R$ 1.000\n- Envio de propostas comerciais\n- Alterações em produção crítica\n- Reset de senhas\n- Exclusão de registros\n- Acesso a dados financeiros sensíveis\n- Modificações em arquivos/NAS\n\n✅ AÇÕES PERMITIDAS SEM APROVAÇÃO (requer_aprovacao: false):\n- Consultas e visualizações\n- Relatórios e dashboards\n- Busca de informações\n- Cálculos e análises\n\nFORMATO DE RESPOSTA:\nSempre retorne JSON estruturado:\n{\n  \"acao\": \"nome_da_acao\",\n  \"parametros\": { \"chave\": \"valor\" },\n  \"requer_aprovacao\": true/false,\n  \"mensagem_usuario\": \"mensagem clara em português\"\n}\n\nSeja claro, objetivo e sempre em português do Brasil.",
+          "maxIterations": 15,
+          "returnIntermediateSteps": false
+        }
+      },
+      "id": "a086b116-f407-423f-acd6-03d7bbead4c8",
+      "name": "Agente Empresarial Central",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        784,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "faaf7eb1-bc21-4d7f-b690-0745d0887a7f",
+      "name": "Modelo OpenAI GPT-5",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        592,
+        528
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "44572ce5-2be8-4fed-a991-afdeff467649",
+      "name": "Calculadora",
+      "type": "@n8n/n8n-nodes-langchain.toolCalculator",
+      "typeVersion": 1,
+      "position": [
+        720,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "modulo",
+              "value": "={{ $json.modulo }}"
+            },
+            {
+              "name": "acao",
+              "value": "={{ $json.acao }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 30000
+        },
+        "optimizeResponse": true,
+        "toolDescription": "Consulta controlada para Consulta Portal Vesper na malha Portal Vesper.",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "07156e3e-7783-48c2-ad72-be8dec1ebe85",
+      "name": "Consulta Portal Vesper",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [
+        848,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "description": "Busca dados específicos no Portal Vesper: compras, cotações, propostas, produção, Kanban, OPs, HelpDesk, TI, RH, financeiro, estoque, qualidade, arquivos/NAS. Retorna dados formatados.",
+        "jsCode": "// Recebe query do agente\nconst query = $input.item.json.query;\n\n// Simula busca (em produção, chamaria API do Portal)\nconst resultado = {\n  status: 'sucesso',\n  dados: {\n    query: query,\n    timestamp: new Date().toISOString(),\n    fonte: 'Portal Vesper'\n  },\n  mensagem: 'Dados recuperados com sucesso. Em produção, conectar à API real do Portal Vesper.'\n};\n\nreturn JSON.stringify(resultado);"
+      },
+      "id": "4e624aaf-357d-4780-bb3b-9b26880a71a2",
+      "name": "Busca Dados Específicos",
+      "type": "@n8n/n8n-nodes-langchain.toolCode",
+      "typeVersion": 1.3,
+      "position": [
+        976,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "acao": "consultar_estoque",
+          "parametros": {
+            "produto_id": "123"
+          },
+          "requer_aprovacao": false,
+          "mensagem_usuario": "Consultando estoque do produto 123..."
+        }
+      },
+      "id": "a73dec37-8e2a-4425-9384-74da50452567",
+      "name": "Parser de Saída Estruturada",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1104,
+        528
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "acao",
+              "value": "={{ $json.output.acao }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "parametros",
+              "value": "={{ $json.output.parametros }}",
+              "type": "object"
+            },
+            {
+              "id": "3",
+              "name": "requer_aprovacao",
+              "value": "={{ $json.output.requer_aprovacao }}",
+              "type": "boolean"
+            },
+            {
+              "id": "4",
+              "name": "mensagem_usuario",
+              "value": "={{ $json.output.mensagem_usuario }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "sessionId",
+              "value": "={{ $('Gatilho Chat Portal Vesper').item.json.sessionId }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ceaef5a3-bea6-413e-b319-107c421a7773",
+      "name": "Extrair Resposta do Agente",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1312,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.requer_aprovacao }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7b23bd0a-a2ce-4ed1-886e-56273cdcfc12",
+      "name": "Requer Aprovação Humana?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1536,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "assunto",
+              "value": "=Portal Vesper - Aprovação Necessária: {{ $json.acao }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "detalhes",
+              "value": "=Ação: {{ $json.acao }}\nParâmetros: {{ JSON.stringify($json.parametros) }}\nMensagem: {{ $json.mensagem_usuario }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "acao_original",
+              "value": "={{ $json.acao }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "parametros_original",
+              "value": "={{ $json.parametros }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "af220063-878e-41d3-8d50-d02d9d661cb5",
+      "name": "Preparar Dados para Aprovação",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1760,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/automation/approvals",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"action_type\": $json.acao_original || $json.acao || \"unknown\", \"description\": $json.detalhes || $json.assunto || \"Aprovação necessária\", \"requester\": $json.user || \"n8n_agent\", \"correlation_id\": $json.correlation_id || $execution.id, \"metadata\": $json } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "69903c66-0db7-4baa-afc2-cdc4707bb9ab",
+      "name": "Solicitar Aprovação por Email",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1984,
+        208
+      ],
+      "notes": "CONVERTIDO: Email sendAndWait → POST /api/automation/approvals"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "and",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.approved }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "true"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "9ff4265e-fb26-4e5f-b00d-b9fc0a090f20",
+      "name": "Aprovação Concedida?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        2208,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"acao\": $json.acao_original, \"parametros\": $json.parametros_original, \"aprovado_por\": $json.responderId } }}",
+        "options": {
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "a8eacd68-7bb0-4837-802a-0426f88024eb",
+      "name": "Executar Ação Aprovada no Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2432,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "aprovado_e_executado",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "mensagem_final",
+              "value": "=Ação {{ $(\"Preparar Dados para Aprovação\").item.json.acao_original }} aprovada e executada com sucesso.",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "aprovador",
+              "value": "={{ $(\"Solicitar Aprovação por Email\").item.json.responderId }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "75cf21c1-6910-49e7-a2f5-1729da299036",
+      "name": "Registrar Aprovação",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2656,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "numberInputs": 3
+      },
+      "id": "70c0bead-c464-4940-a66b-0ba06b6e744f",
+      "name": "Consolidar Todos os Resultados",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        2880,
+        288
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "rejeitado",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "mensagem_final",
+              "value": "=Ação {{ $(\"Preparar Dados para Aprovação\").item.json.acao_original }} foi rejeitada pelo aprovador.",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "aprovador",
+              "value": "={{ $(\"Solicitar Aprovação por Email\").item.json.responderId }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "3e088637-c2ee-4d19-a87f-0c9162d33af8",
+      "name": "Registrar Rejeição",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2656,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api",
+        "authentication": "none",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"acao\": $json.acao, \"parametros\": $json.parametros } }}",
+        "options": {
+          "response": {
+            "response": {
+              "neverError": true
+            }
+          },
+          "timeout": 30000
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        }
+      },
+      "id": "25de8d9d-de1b-4692-bbeb-2e3b7ced2d0d",
+      "name": "Executar Ação Direta no Portal",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        2432,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "executado",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "mensagem_final",
+              "value": "={{ $(\"Extrair Resposta do Agente\").item.json.mensagem_usuario }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "resultado",
+              "value": "={{ $json }}",
+              "type": "object"
+            },
+            {
+              "id": "4",
+              "name": "timestamp",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "245794e3-6b6d-44f5-8514-ba810e1a476d",
+      "name": "Registrar Execução",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2656,
+        496
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "workflow_id",
+              "value": "={{ $workflow.id }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "execution_id",
+              "value": "={{ $execution.id }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "status_final",
+              "value": "={{ $json.status }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "mensagem",
+              "value": "={{ $json.mensagem_final }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "timestamp_auditoria",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "dados_completos",
+              "value": "={{ $json }}",
+              "type": "object"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "b922000a-b988-4ee3-8993-4d4d434a0107",
+      "name": "Auditoria e Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        3104,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 🚀 PORTAL VESPER - AGENTE EMPRESARIAL CENTRAL\n\nAgente de IA completo para gestão empresarial.\n\n**Módulos:** Compras, Propostas, Produção, Kanban, OPs, HelpDesk, TI, RH, Financeiro, Estoque, Qualidade, Arquivos/NAS, Aprovações, Relatórios.\n\n**Segurança:** Aprovação humana obrigatória para ações sensíveis.",
+        "height": 200,
+        "width": 600,
+        "color": 2
+      },
+      "id": "de9093f7-7b1b-4a1c-8c50-2187b529a1e0",
+      "name": "Sticky Note 49276e55",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -128,
+        -160
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ⚠️ FLUXO DE APROVAÇÃO HUMANA\n\nAções sensíveis exigem aprovação:\n• Compras > R$ 1.000\n• Envio de propostas\n• Alterações em produção\n• Reset de senhas\n• Exclusões\n• Acesso financeiro\n\nEmail enviado ao aprovador com botões Aprovar/Rejeitar.",
+        "height": 200,
+        "width": 900,
+        "color": 3
+      },
+      "id": "81f19233-a75a-4df6-9986-7f3d39e0f698",
+      "name": "Sticky Note def2c47f",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        960,
+        -192
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## ✅ EXECUÇÃO DIRETA\n\nAções permitidas sem aprovação:\n• Consultas\n• Relatórios\n• Visualizações\n• Cálculos\n\nExecutadas imediatamente no Portal Vesper.",
+        "height": 200,
+        "width": 600,
+        "color": 4
+      },
+      "id": "fd079e67-d822-4361-b447-e479898d3acd",
+      "name": "Sticky Note 2cce9f47",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1392,
+        560
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 📊 AUDITORIA E NOTIFICAÇÃO\n\nTodas as execuções são:\n• Registradas com timestamp\n• Auditadas com execution ID\n• Notificadas no Slack\n\nRastreabilidade completa.",
+        "height": 200,
+        "width": 600,
+        "color": 5
+      },
+      "id": "203bfef0-2f19-4fc3-9b9b-1eb7fe982af4",
+      "name": "Sticky Note e1bfa8ca",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        3056,
+        592
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "1d8169bc-e2af-4d31-86fa-caaf456eeb42",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Gatilho Chat Portal Vesper": {
+      "main": [
+        [
+          {
+            "node": "Agente Empresarial Central",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Memória da Conversa": {
+      "ai_memory": [
+        [
+          {
+            "node": "Gatilho Chat Portal Vesper",
+            "type": "ai_memory",
+            "index": 0
+          },
+          {
+            "node": "Agente Empresarial Central",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente Empresarial Central": {
+      "main": [
+        [
+          {
+            "node": "Extrair Resposta do Agente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI GPT-5": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente Empresarial Central",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculadora": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Empresarial Central",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta Portal Vesper": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Empresarial Central",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Busca Dados Específicos": {
+      "ai_tool": [
+        [
+          {
+            "node": "Agente Empresarial Central",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser de Saída Estruturada": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente Empresarial Central",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Resposta do Agente": {
+      "main": [
+        [
+          {
+            "node": "Requer Aprovação Humana?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Requer Aprovação Humana?": {
+      "main": [
+        [
+          {
+            "node": "Preparar Dados para Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Executar Ação Direta no Portal",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Preparar Dados para Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Solicitar Aprovação por Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Solicitar Aprovação por Email": {
+      "main": [
+        [
+          {
+            "node": "Aprovação Concedida?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aprovação Concedida?": {
+      "main": [
+        [
+          {
+            "node": "Executar Ação Aprovada no Portal",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Registrar Rejeição",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Executar Ação Aprovada no Portal": {
+      "main": [
+        [
+          {
+            "node": "Registrar Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Todos os Resultados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consolidar Todos os Resultados": {
+      "main": [
+        [
+          {
+            "node": "Auditoria e Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Rejeição": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Todos os Resultados",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Executar Ação Direta no Portal": {
+      "main": [
+        [
+          {
+            "node": "Registrar Execução",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Registrar Execução": {
+      "main": [
+        [
+          {
+            "node": "Consolidar Todos os Resultados",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Auditoria e Log": {
+      "main": [
+        []
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Gatilho Chat Portal Vesper",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "8dc21a57-6253-42f5-9efa-cb4a06d6f375",
+  "tags": []
+}

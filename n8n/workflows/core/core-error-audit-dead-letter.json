@@ -1,0 +1,316 @@
+{
+  "updatedAt": "2026-05-20T13:19:18.263Z",
+  "createdAt": "2026-05-19T15:29:08.794Z",
+  "name": "CORE - Error Audit Dead Letter",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "7662c64b-a2eb-485a-8b1b-6bcfc23e8001",
+      "name": "Error Trigger",
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        100
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e442eb4b-14d2-430c-ab2f-0d944c688002",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        100,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### Webhook URL\\nNo n8n, a URL final de produção para este Webhook será:\\n`/webhook/vesper/core/error-audit`",
+        "height": 140,
+        "width": 300
+      },
+      "id": "sticky-note-webhook",
+      "name": "Sticky Note",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        100,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "vesper/core/error-audit",
+        "responseMode": "lastNode",
+        "options": {}
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938003",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 1,
+      "position": [
+        100,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "function generateId() {\n    return 'req_' + Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);\n}\n\nfunction redactObject(obj) {\n    if (!obj || typeof obj !== 'object') {\n        return obj;\n    }\n    \n    const sensitiveKeys = [\n        'password', 'senha', 'token', 'api_key', 'apikey', 'secret', \n        'authorization', 'cookie', 'smtp_password', 'imap_password', \n        'jwt', 'bearer', 'access_token', 'refresh_token', 'private_key', \n        'client_secret'\n    ];\n    \n    if (Array.isArray(obj)) {\n        return obj.map(item => redactObject(item));\n    }\n    \n    const redacted = {};\n    for (const key in obj) {\n        if (obj.hasOwnProperty(key)) {\n            const lowerKey = key.toLowerCase();\n            const isSensitive = sensitiveKeys.some(sKey => lowerKey.includes(sKey));\n            \n            if (isSensitive) {\n                redacted[key] = '[REDACTED]';\n            } else if (typeof obj[key] === 'object') {\n                redacted[key] = redactObject(obj[key]);\n            } else {\n                redacted[key] = obj[key];\n            }\n        }\n    }\n    return redacted;\n}\n\nconst items = $input.all();\nconst results = [];\n\nlet envRuntimeMode = \"\";\ntry {\n    if (typeof $env !== 'undefined' && $env.VESPER_RUNTIME_MODE) {\n        envRuntimeMode = $env.VESPER_RUNTIME_MODE;\n    }\n} catch (e) {}\n\nfor (const item of items) {\n    const json = item.json;\n    let rawInput = {};\n    if (json.error && json.workflow) {\n        rawInput = {\n            runtime_mode: json.runtime_mode || envRuntimeMode || \"MOCK\",\n            source: \"n8n\",\n            workflow: json.workflow.name || \"\",\n            failed_node: json.error.node?.name || \"\",\n            error_message: json.error.message || \"\",\n            error_stack: json.error.stack || \"\",\n            payload_summary: json.execution || {},\n            input: json.error.node?.parameters || {}\n        };\n    } else if (json.query && Object.keys(json.query).length > 0) {\n        rawInput = json.query;\n    } else if (json.body && Object.keys(json.body).length > 0) {\n        rawInput = json.body;\n    } else {\n        rawInput = json;\n    }\n    \n    let runtimeMode = (rawInput.runtime_mode || envRuntimeMode || \"TESTE\").toUpperCase();\n    if (![\"TESTE\", \"MOCK\", \"PORTAL\"].includes(runtimeMode)) {\n        runtimeMode = \"TESTE\";\n    }\n    \n    const correlationId = rawInput.correlation_id || rawInput.correlationId || generateId();\n    const requestId = rawInput.request_id || rawInput.requestId || generateId();\n    \n    const source = rawInput.source || \"n8n\";\n    const workflowName = rawInput.workflow || \"Unknown Workflow\";\n    const agent = rawInput.agent || \"core\";\n    const moduleName = rawInput.module || rawInput.module_hint || \"\";\n    const failedNode = rawInput.failed_node || rawInput.failedNode || \"\";\n    const errorMessage = rawInput.error_message || rawInput.message || \"\";\n    const errorStack = rawInput.error_stack || \"\";\n    const retryCount = parseInt(rawInput.retry_count || rawInput.retryCount || 0, 10);\n    \n    const user = rawInput.user || { id: \"\", name: \"\", role: \"\", department: \"\" };\n    \n    const defaultRiskContext = {\n        customer_related: false,\n        supplier_related: false,\n        financial_related: false,\n        external_email_related: false,\n        security_related: false,\n        production_related: false,\n        ex_inmetro_related: false\n    };\n    const inputRisk = rawInput.risk_context || rawInput.riskContext || {};\n    const riskContext = {};\n    for (const key in defaultRiskContext) {\n        let val = inputRisk[key];\n        if (val === undefined) {\n            val = rawInput[`risk_context[${key}]`] || rawInput[`riskContext[${key}]`];\n        }\n        if (val === 'true' || val === true || val === 1 || val === '1') {\n            riskContext[key] = true;\n        } else {\n            riskContext[key] = false;\n        }\n    }\n    \n    const redactedInput = redactObject(rawInput.input || rawInput.payload || {});\n    const redactedPayloadSummary = redactObject(rawInput.payload_summary || {});\n    const redactedErrorMessage = typeof errorMessage === 'string' ? redactObject({msg: errorMessage}).msg : errorMessage;\n    const redactedErrorStack = typeof errorStack === 'string' ? redactObject({stack: errorStack}).stack : errorStack;\n    \n    let severity = \"low\";\n    let isCritical = false;\n    let isHigh = false;\n    \n    const criticalKeywords = [\n        'credential', 'vazamento', 'senha', 'password', 'key_leak', \n        'ex_inmetro', 'inmetro', 'compliance', 'exclusao', 'delete', 'drop'\n    ];\n    \n    const containsCriticalKeyword = \n        criticalKeywords.some(kw => redactedErrorMessage?.toLowerCase().includes(kw)) ||\n        criticalKeywords.some(kw => redactedErrorStack?.toLowerCase().includes(kw));\n        \n    if (riskContext.security_related || riskContext.ex_inmetro_related || containsCriticalKeyword) {\n        severity = \"critical\";\n        isCritical = true;\n    } else if (\n        riskContext.customer_related || \n        riskContext.supplier_related || \n        riskContext.financial_related || \n        riskContext.external_email_related || \n        riskContext.production_related\n    ) {\n        severity = \"high\";\n        isHigh = true;\n    } else if (errorMessage && errorMessage.trim().length > 0) {\n        severity = \"medium\";\n    }\n    \n    let retryable = false;\n    const nonRetryableKeywords = ['auth', 'unauthorized', 'forbidden', 'credential', 'validation', 'syntax', 'not found', 'invalid'];\n    const isNonRetryable = nonRetryableKeywords.some(kw => redactedErrorMessage?.toLowerCase().includes(kw));\n    \n    if (!isCritical && !isNonRetryable && retryCount < 3) {\n        retryable = true;\n    }\n    \n    let status = \"logged\";\n    let deadLetterStatus = \"\";\n    let nextAction = \"none\";\n    \n    if (severity === \"critical\" || severity === \"high\") {\n        status = \"manual_review\";\n        deadLetterStatus = \"waiting_review\";\n        nextAction = \"manual_review\";\n    } else if (retryable) {\n        status = \"retry_pending\";\n        deadLetterStatus = \"retry_scheduled\";\n        nextAction = \"retry_pending\";\n    } else if (severity === \"medium\") {\n        status = \"dead_letter\";\n        deadLetterStatus = \"dead_letter\";\n        nextAction = \"none\";\n    }\n    \n    const missingFields = [];\n    if (!rawInput.workflow) missingFields.push(\"workflow\");\n    if (!rawInput.error_message && !rawInput.message) missingFields.push(\"error_message\");\n    \n    results.push({\n        json: {\n            correlation_id: correlationId,\n            request_id: requestId,\n            status: status,\n            agent: \"core\",\n            workflow: \"CORE - Error Audit Dead Letter\",\n            summary: `Error captured, redacted, classified as ${severity} and stored.`,\n            data: {\n                source_workflow: workflowName,\n                failed_node: failedNode,\n                severity: severity,\n                retryable: retryable,\n                retry_count: retryCount,\n                dead_letter_status: deadLetterStatus,\n                portal_synced: false,\n                source: source,\n                module: moduleName,\n                error_message: redactedErrorMessage,\n                error_stack: redactedErrorStack,\n                risk_context: riskContext,\n                payload_summary: redactedPayloadSummary,\n                input: redactedInput,\n                user: user\n            },\n            missing_fields: missingFields,\n            requires_approval: (severity === \"critical\" || severity === \"high\"),\n            approval_id: (severity === \"critical\" || severity === \"high\") ? \"appr_\" + generateId().substring(4) : null,\n            risk_level: severity,\n            next_action: nextAction,\n            runtime_mode: runtimeMode\n        }\n    });\n}\n\nreturn results;"
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938004",
+      "name": "Process Error Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        350,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "dataType": "string",
+        "value1": "={{$json.runtime_mode}}",
+        "rules": {
+          "rules": [
+            {
+              "value2": "TESTE"
+            },
+            {
+              "value2": "MOCK"
+            },
+            {
+              "value2": "PORTAL"
+            }
+          ]
+        }
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938005",
+      "name": "Branch Mode",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 1,
+      "position": [
+        600,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{\n  json: {\n    ...$input.item.json,\n    db_logs_mocked: true,\n    db_logs_table: \"vesper_agent_logs\",\n    dead_letter_mocked: true,\n    dead_letter_table: \"vesper_dead_letters\",\n    message: \"TESTE Mode: No real actions performed. Logs simulated in mock tables.\"\n  }\n}];"
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938006",
+      "name": "TESTE - Log Data Table Mock",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "return [{\n  json: {\n    ...$input.item.json,\n    mock_saved: true,\n    saved_to_dead_letters: $input.item.json.next_action === 'retry_pending' || $input.item.json.risk_level === 'medium',\n    saved_to_agent_logs: true,\n    message: \"MOCK Mode: Simulated Portal payload. Stored locally in virtual Data Tables.\"\n  }\n}];"
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938007",
+      "name": "MOCK - Log Data Tables",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        850,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "={{$env.VESPER_PORTAL_BASE_URL}}/api/automation/errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "=Bearer {{$env.VESPER_PORTAL_API_KEY}}"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{JSON.stringify($json)}}",
+        "options": {}
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938008",
+      "name": "Portal Vesper Sync",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.1,
+      "position": [
+        850,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "alerts@portal.example",
+        "toEmail": "admin@portal.example",
+        "subject": "=[Vesper Error Alert] - Severity: {{$json.risk_level}}",
+        "html": "=<h3>Vesper Automation Error Alert</h3><p>An error occurred in workflow <b>{{$json.data.source_workflow}}</b> on node <b>{{$json.data.failed_node}}</b>.</p><p><b>Message:</b> {{$json.data.error_message}}</p><p><b>Severity:</b> {{$json.risk_level}}</p><p><b>Next Action:</b> {{$json.next_action}}</p>"
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938009",
+      "name": "Notification - Error Alert",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "disabled": true,
+      "position": [
+        1100,
+        400
+      ]
+    },
+    {
+      "parameters": {
+        "language": "javaScript",
+        "mode": "runOnceForAllItems",
+        "jsCode": "const item = $input.first();\nconst data = item.json;\n\nreturn [{\n  json: {\n    status: data.status || \"success\",\n    agent: data.agent || \"core\",\n    workflow: data.workflow || \"CORE - Error Audit Dead Letter\",\n    correlation_id: data.correlation_id || \"\",\n    request_id: data.request_id || \"\",\n    next_action: data.next_action || \"none\",\n    timestamp: new Date().toISOString(),\n    runtime_mode: data.runtime_mode || \"TESTE\",\n    data: data.data || {}\n  }\n}];"
+      },
+      "id": "c0556f2f-1d89-408f-8eb4-972c21938010",
+      "name": "Standard Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1350,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Error Trigger": {
+      "main": [
+        [
+          {
+            "node": "Process Error Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Process Error Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Process Error Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Process Error Payload": {
+      "main": [
+        [
+          {
+            "node": "Branch Mode",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Branch Mode": {
+      "main": [
+        [
+          {
+            "node": "TESTE - Log Data Table Mock",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "MOCK - Log Data Tables",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Portal Vesper Sync",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "TESTE - Log Data Table Mock": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "MOCK - Log Data Tables": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Portal Vesper Sync": {
+      "main": [
+        [
+          {
+            "node": "Notification - Error Alert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Notification - Error Alert": {
+      "main": [
+        [
+          {
+            "node": "Standard Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "activeVersionId": "9e8d91e0-b576-4bca-9d9a-bdbc1b49377e",
+  "tags": []
+}

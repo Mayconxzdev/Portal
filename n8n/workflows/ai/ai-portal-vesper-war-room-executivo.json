@@ -1,0 +1,778 @@
+{
+  "updatedAt": "2026-05-20T17:43:16.807Z",
+  "createdAt": "2026-05-20T16:34:51.733Z",
+  "name": "AI - PORTAL VESPER - War Room Executivo",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b232b061-fc80-43ba-8955-23b8463fda7d",
+      "name": "Gatilho Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "49ce4e6e-1f21-4068-a638-fc6f2d954989",
+      "name": "Consulta Saúde Workflows",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        112
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "numberInputs": 10
+      },
+      "id": "c8c6dba7-da10-4896-a29e-783b6eaa6f24",
+      "name": "Combinar Dados",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        688,
+        848
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/automation/approvals",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "f3af0ceb-ec7a-4a6c-a7e6-dc0182e78abe",
+      "name": "Consulta Aprovações Pendentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        304
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/automation/errors",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "5f37285b-dac9-4f19-9505-764143465362",
+      "name": "Consulta Erros Recentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        496
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "6cfdae94-4a69-4940-aa5a-441d7e737d19",
+      "name": "Consulta Dead Letters",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        688
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "d58b813f-842c-472c-8179-c9d103a0fcf2",
+      "name": "Consulta OPs Atrasadas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        880
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "0d08c11b-65bc-4f03-8cb1-6b09b98c5afa",
+      "name": "Consulta Kanban",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        1072
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "8c1670f2-911e-4105-9687-6966f55ed1ea",
+      "name": "Consulta Compras Pendentes",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        1264
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "e7ac3e14-693d-4193-a9ec-93cf45cdb7ce",
+      "name": "Consulta Propostas Paradas",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        1456
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "ac816072-3cc6-4079-b544-6a215e60b536",
+      "name": "Consulta Chamados Críticos",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        1648
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "url": "http://host.docker.internal:8000/api/health",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "26d22a40-3e9c-43b3-8970-2e362cf6b2c1",
+      "name": "Consulta Documentos Vencendo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        464,
+        1840
+      ],
+      "executeOnce": true
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 8
+            }
+          ]
+        }
+      },
+      "id": "a570472b-fb6f-47d6-9d34-9f6b27844646",
+      "name": "Agendamento Diário",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        240,
+        1744
+      ]
+    },
+    {
+      "parameters": {
+        "aggregate": "aggregateAllItemData",
+        "destinationFieldName": "dadosColetados",
+        "options": {}
+      },
+      "id": "2c3bf26b-ff93-4df2-8e55-5cd90eac2b5c",
+      "name": "Agregar Dados",
+      "type": "n8n-nodes-base.aggregate",
+      "typeVersion": 1,
+      "position": [
+        912,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=Você é um analista executivo especializado em monitoramento empresarial.\n\nAnalise os dados coletados abaixo e gere um resumo executivo completo:\n\n{{ $json.dadosColetados }}\n\nIMPORTANTE:\n- NÃO aprove nada automaticamente\n- NÃO corrija nada automaticamente\n- NÃO apague logs\n- APENAS resuma, alerte e recomende ações\n\nClassifique os riscos considerando:\n- Workflows com erro ou pausados\n- Aprovações pendentes há mais de 3 dias\n- Erros recorrentes (mais de 2 ocorrências)\n- Dead letters acumuladas\n- OPs atrasadas mais de 5 dias\n- Itens bloqueados no Kanban\n- Compras urgentes pendentes\n- Propostas paradas mais de 7 dias\n- Chamados críticos abertos\n- Documentos vencendo em menos de 7 dias\n\nGere recomendações práticas e acionáveis para cada problema identificado.",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um analista executivo do Portal Vesper. Sua função é analisar dados operacionais, classificar riscos e gerar resumos executivos com recomendações práticas. Seja objetivo, claro e focado em ações. Nunca aprove, corrija ou apague dados automaticamente - apenas analise e recomende.",
+          "maxIterations": 5
+        }
+      },
+      "id": "6815b404-8887-4447-bc0d-53a3f62b3b57",
+      "name": "Agente IA - Análise Executiva",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1136,
+        976
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {
+          "temperature": 0.3
+        }
+      },
+      "id": "d9e27647-f662-4b65-af95-af5d2da1a4ea",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1152,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "resumoExecutivo": "Resumo geral da situação da empresa",
+          "indicadoresChave": {
+            "saudeWorkflows": "verde/amarelo/vermelho",
+            "aprovacoesPendentes": 0,
+            "errosCriticos": 0,
+            "deadLetters": 0,
+            "opsAtrasadas": 0,
+            "kanbanBloqueados": 0,
+            "comprasPendentes": 0,
+            "propostasParadas": 0,
+            "chamadosCriticos": 0,
+            "documentosVencendo": 0
+          },
+          "classificacaoRisco": {
+            "nivelGeral": "baixo/médio/alto/crítico",
+            "pontuacao": 0,
+            "justificativa": "Explicação do nível de risco"
+          },
+          "alertasPrioritarios": [
+            {
+              "categoria": "workflows/aprovações/erros/etc",
+              "severidade": "baixa/média/alta/crítica",
+              "descricao": "Descrição do alerta",
+              "impacto": "Impacto no negócio",
+              "recomendacao": "Ação recomendada"
+            }
+          ],
+          "recomendacoesDia": [
+            {
+              "prioridade": 1,
+              "acao": "Ação recomendada",
+              "responsavel": "Área/pessoa responsável",
+              "prazo": "Prazo sugerido"
+            }
+          ],
+          "metricas": {
+            "totalItensAnalisados": 0,
+            "itensComProblema": 0,
+            "percentualSaude": 0
+          }
+        }
+      },
+      "id": "6d83274f-d742-40e3-b4ad-c3d3752686f2",
+      "name": "Parser Estruturado",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        1280,
+        1200
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.classificacaoRisco.nivelGeral }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "crítico"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "critico"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.classificacaoRisco.nivelGeral }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "alto"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "alto"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.output.classificacaoRisco.nivelGeral }}",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "rightValue": "médio"
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "medio"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Baixo"
+        }
+      },
+      "id": "85329814-0514-44ca-8b18-5ad666e59109",
+      "name": "Classificar Risco",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        1488,
+        944
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://host.docker.internal:8000/api/automation/audit",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpBearerAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { \"timestamp\": $now.toISO(), \"workflow\": \"War Room Executivo\", \"action\": \"analise_executiva\", \"riskLevel\": $(\"Agente IA - Análise Executiva\").item.json.output.classificacaoRisco.nivelGeral, \"score\": $(\"Agente IA - Análise Executiva\").item.json.output.classificacaoRisco.pontuacao, \"summary\": $(\"Agente IA - Análise Executiva\").item.json.output.resumoExecutivo, \"metrics\": $(\"Agente IA - Análise Executiva\").item.json.output.metricas } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "id": "df3a4b52-595b-45e5-8fe8-e59484669243",
+      "name": "Registrar Auditoria",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1936,
+        976
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "e53787f2-8ee7-4708-91af-b05f14004cdd",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Gatilho Manual": {
+      "main": [
+        [
+          {
+            "node": "Consulta Saúde Workflows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Aprovações Pendentes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Erros Recentes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Dead Letters",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta OPs Atrasadas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Kanban",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Compras Pendentes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Propostas Paradas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Chamados Críticos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Documentos Vencendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta Saúde Workflows": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Combinar Dados": {
+      "main": [
+        [
+          {
+            "node": "Agregar Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Consulta Aprovações Pendentes": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Consulta Erros Recentes": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Consulta Dead Letters": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Consulta OPs Atrasadas": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 4
+          }
+        ]
+      ]
+    },
+    "Consulta Kanban": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 5
+          }
+        ]
+      ]
+    },
+    "Consulta Compras Pendentes": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 6
+          }
+        ]
+      ]
+    },
+    "Consulta Propostas Paradas": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 7
+          }
+        ]
+      ]
+    },
+    "Consulta Chamados Críticos": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 8
+          }
+        ]
+      ]
+    },
+    "Consulta Documentos Vencendo": {
+      "main": [
+        [
+          {
+            "node": "Combinar Dados",
+            "type": "main",
+            "index": 9
+          }
+        ]
+      ]
+    },
+    "Agendamento Diário": {
+      "main": [
+        [
+          {
+            "node": "Consulta Saúde Workflows",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Aprovações Pendentes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Erros Recentes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Dead Letters",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta OPs Atrasadas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Kanban",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Compras Pendentes",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Propostas Paradas",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Chamados Críticos",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Consulta Documentos Vencendo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agregar Dados": {
+      "main": [
+        [
+          {
+            "node": "Agente IA - Análise Executiva",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente IA - Análise Executiva": {
+      "main": [
+        [
+          {
+            "node": "Classificar Risco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente IA - Análise Executiva",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Estruturado": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente IA - Análise Executiva",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classificar Risco": {
+      "main": [
+        [],
+        [],
+        [],
+        []
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Consulta Saúde Workflows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "5037ac85-1540-4d42-af2f-f11debe57791",
+  "tags": []
+}

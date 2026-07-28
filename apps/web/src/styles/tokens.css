@@ -1,0 +1,123 @@
+/* Portal Vesper — Design tokens (Dark Glass Cartoon Corporativo) */
+
+:root {
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  --bg-primary-hsl: 222, 47%, 7%;
+  --bg-secondary-hsl: 222, 40%, 12%;
+  --bg-tertiary-hsl: 222, 35%, 18%;
+
+  --bg-primary: hsl(var(--bg-primary-hsl));
+  --bg-secondary: hsl(var(--bg-secondary-hsl));
+  --bg-tertiary: hsl(var(--bg-tertiary-hsl));
+
+  --surface-glass: rgba(12, 24, 44, 0.72);
+  --surface-glass-strong: rgba(18, 32, 55, 0.88);
+
+  --text-primary: #f8fafc;
+  --text-secondary: #c8d7ea;
+  --text-muted: #8ea3bd;
+
+  --color-primary: #9f7aea;
+  --color-info: #38bdf8;
+  --color-success: #34d399;
+  --color-warning: #fbbf24;
+  --color-danger: #fb7185;
+  --color-magenta: #f472b6;
+  --success-text: #86efac;
+  --success-surface: rgba(34, 197, 94, 0.12);
+  --success-border: rgba(34, 197, 94, 0.28);
+
+  --module-dashboard: #60a5fa;
+  --module-kanban: #a78bfa;
+  --module-it: #22d3ee;
+  --module-chat: #22c55e;
+  --module-files: #f59e0b;
+  --module-purchases: #fb923c;
+  --module-proposals: #818cf8;
+  --module-stock: #10b981;
+  --module-approvals: #34d399;
+  --module-automations: #e879f9;
+  --module-admin: #94a3b8;
+
+  --border-color: rgba(255, 255, 255, 0.08);
+  --glass-bg: rgba(19, 26, 44, 0.65);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-shadow: rgba(0, 0, 0, 0.4);
+
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 22px;
+  --radius-xl: 30px;
+  --radius-full: 999px;
+  --radius-control: 8px;
+  --radius-panel: 10px;
+
+  --shadow-card: 0 22px 70px rgba(1, 6, 18, 0.36);
+  --shadow-modal: 0 30px 90px rgba(1, 6, 18, 0.62);
+  --shadow-dropdown: 0 16px 40px rgba(1, 6, 18, 0.45);
+  --shadow-glow: 0 0 0 1px rgba(159, 122, 234, 0.2), 0 18px 46px rgba(79, 70, 229, 0.22);
+  --focus-ring: 0 0 0 3px rgba(56, 189, 248, 0.26);
+
+  --sidebar-expanded-width: 260px;
+  --sidebar-collapsed-width: 68px;
+  --topbar-height: 70px;
+
+  --z-base: 1;
+  --z-card: 10;
+  --z-sticky: 20;
+  --z-dropdown: 500;
+  --z-popover: 600;
+  --z-sidebar: 700;
+  --z-topbar: 800;
+  --z-drawer: 900;
+  --z-modal: 1000;
+  --z-tooltip: 1100;
+  --z-toast: 1200;
+
+  --font-family: 'Inter', system-ui, -apple-system, sans-serif;
+
+  --cartoon-border: rgba(191, 219, 254, 0.18);
+  --cartoon-shadow: rgba(2, 6, 23, 0.36);
+  --cartoon-text-dark: var(--text-primary);
+}
+
+[data-theme='light'], html[data-theme='light'], :root[data-theme='light'] {
+  --bg-primary: #f0f4fa;
+  --bg-secondary: #ffffff;
+  --bg-tertiary: #e2e8f0;
+  --surface-glass: rgba(255, 255, 255, 0.85);
+  --surface-glass-strong: #ffffff;
+  --text-primary: #0f172a;
+  --text-secondary: #334155;
+  --text-muted: #64748b;
+  --border-color: rgba(15, 23, 42, 0.08);
+  --glass-bg: rgba(255, 255, 255, 0.75);
+  --glass-border: rgba(15, 23, 42, 0.08);
+  --glass-shadow: rgba(15, 23, 42, 0.05);
+  --shadow-card: 0 12px 40px rgba(15, 23, 42, 0.05);
+  --shadow-glow: 0 0 0 1px rgba(124, 58, 237, 0.15);
+  --cartoon-border: rgba(15, 23, 42, 0.08);
+  --cartoon-shadow: rgba(15, 23, 42, 0.04);
+  --cartoon-text-dark: #0f172a;
+
+  --module-dashboard: #2563eb;
+  --module-kanban: #7c3aed;
+  --module-it: #0891b2;
+  --module-chat: #16a34a;
+  --module-files: #d97706;
+  --module-purchases: #ea580c;
+  --module-proposals: #4f46e5;
+  --module-stock: #059669;
+  --module-approvals: #15803d;
+  --module-automations: #c026d3;
+  --module-admin: #475569;
+  --success-text: #166534;
+  --success-surface: #ecfdf5;
+  --success-border: rgba(22, 101, 52, 0.22);
+}

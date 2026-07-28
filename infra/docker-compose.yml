@@ -1,0 +1,151 @@
+services:
+  db:
+    image: ${POSTGRES_IMAGE:-postgres:18.4-alpine}
+    container_name: vesper_postgres
+    restart: always
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-portal_vesper}
+      POSTGRES_USER: ${POSTGRES_USER:-vesper_admin}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-dev-postgres-password}
+    ports:
+      - "${POSTGRES_PORT:-55432}:5432"
+    volumes:
+      - postgres18_cluster_data:/var/lib/postgresql
+    networks:
+      - vesper_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-vesper_admin} -d ${POSTGRES_DB:-portal_vesper}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: ${REDIS_IMAGE:-redis:8.8-alpine}
+    container_name: vesper_redis
+    restart: always
+    command: redis-server --requirepass ${REDIS_PASSWORD:-local-dev-redis-password}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - vesper_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-local-dev-redis-password}", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  minio:
+    image: ${MINIO_IMAGE:-quay.io/minio/minio:latest}
+    container_name: vesper_minio
+    restart: always
+    ports:
+      - "${MINIO_PORT:-9000}:9000"
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-vesper_minio_user}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-dev-minio-password}
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+    networks:
+      - vesper_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  n8n:
+    image: ${N8N_IMAGE:-docker.n8n.io/n8nio/n8n:2.27.3}
+    container_name: vesper_n8n
+    restart: always
+    ports:
+      - "${N8N_PORT:-5680}:5678"
+    environment:
+      - N8N_ENCRYPTION_KEY=${N8N_ENCRYPTION_KEY:-local-dev-n8n-encryption-key}
+      - N8N_USERMANAGEMENT_JWT_SECRET=${N8N_USERMANAGEMENT_JWT_SECRET:-local-dev-n8n-jwt-secret}
+      - DB_TYPE=postgresdb
+      - DB_POSTGRESDB_HOST=db
+      - DB_POSTGRESDB_PORT=5432
+      - DB_POSTGRESDB_DATABASE=${POSTGRES_DB:-portal_vesper}
+      - DB_POSTGRESDB_USER=${POSTGRES_USER:-vesper_admin}
+      - DB_POSTGRESDB_PASSWORD=${POSTGRES_PASSWORD:-local-dev-postgres-password}
+    volumes:
+      - n8n_data:/home/node/.n8n
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - vesper_network
+
+  searxng:
+    image: ${SEARXNG_IMAGE:-searxng/searxng:latest}
+    container_name: vesper_searxng
+    restart: unless-stopped
+    ports:
+      - "${SEARXNG_PORT:-8088}:8080"
+    environment:
+      - SEARXNG_BASE_URL=${SEARXNG_BASE_URL:-http://localhost:8088/}
+      - UWSGI_WORKERS=${SEARXNG_WORKERS:-2}
+      - UWSGI_THREADS=${SEARXNG_THREADS:-2}
+    volumes:
+      - searxng_data:/etc/searxng
+    networks:
+      - vesper_network
+
+  purchases-worker:
+    image: ${PYTHON_WORKER_IMAGE:-python:3.14-slim}
+    container_name: vesper_purchases_worker
+    restart: unless-stopped
+    working_dir: /app/backend
+    command: sh -c "pip install --no-cache-dir -r requirements.txt && python -m dramatiq app.modules.purchases.worker"
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER:-vesper_admin}:${POSTGRES_PASSWORD:-local-dev-postgres-password}@db:5432/${POSTGRES_DB:-portal_vesper}
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-local-dev-redis-password}
+      PURCHASES_SEARXNG_URL: http://searxng:8080
+      SERPAPI_API_KEY: ${SERPAPI_API_KEY:-}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      PURCHASES_GEMINI_MODEL: ${PURCHASES_GEMINI_MODEL:-gemini-3.5-flash}
+      PURCHASES_RESEARCH_ASYNC_ENABLED: "true"
+    volumes:
+      - ../:/app
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - vesper_network
+
+  adminer:
+    image: ${ADMINER_IMAGE:-adminer:latest}
+    container_name: vesper_adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+    networks:
+      - vesper_network
+
+volumes:
+  postgres18_cluster_data:
+    driver: local
+  redis_data:
+    driver: local
+  minio_data:
+    driver: local
+  n8n_data:
+    driver: local
+  searxng_data:
+    driver: local
+
+networks:
+  vesper_network:
+    driver: bridge
+
+

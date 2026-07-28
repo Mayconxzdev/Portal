@@ -1,0 +1,642 @@
+{
+  "updatedAt": "2026-05-20T17:43:16.497Z",
+  "createdAt": "2026-05-20T16:34:46.865Z",
+  "name": "AI - PORTAL VESPER - Agente Financeiro",
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "b6bc4128-ef59-4297-ba2c-6a386ac06acb",
+      "name": "Início Manual",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "48a53a88-38cc-4575-bb1a-9b3540eb1a40",
+      "name": "Buscar Despesas para Relatório",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        464,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Análise financeira\nconst items = $input.all();\n\n// Totais por status\nconst totalAprovado = items\n  .filter(i => i.json.status === 'aprovado' || i.json.status === 'aprovado_automatico')\n  .reduce((sum, i) => sum + (i.json.valor || 0), 0);\n\nconst totalPendente = items\n  .filter(i => i.json.status === 'pendente_aprovacao')\n  .reduce((sum, i) => sum + (i.json.valor || 0), 0);\n\nconst totalRejeitado = items\n  .filter(i => i.json.status === 'rejeitado')\n  .reduce((sum, i) => sum + (i.json.valor || 0), 0);\n\n// Totais por categoria\nconst porCategoria = items.reduce((acc, i) => {\n  const cat = i.json.categoria || 'Não categorizado';\n  acc[cat] = (acc[cat] || 0) + (i.json.valor || 0);\n  return acc;\n}, {});\n\n// Totais por centro de custo\nconst porCentroCusto = items.reduce((acc, i) => {\n  const cc = i.json.centro_custo || 'Não definido';\n  acc[cc] = (acc[cc] || 0) + (i.json.valor || 0);\n  return acc;\n}, {});\n\n// Vencimentos próximos (próximos 7 dias)\nconst vencimentosProximos = items.filter(i => {\n  if (!i.json.vencimento || i.json.status === 'rejeitado') return false;\n  const dias = Math.ceil((new Date(i.json.vencimento) - new Date()) / (1000 * 60 * 60 * 24));\n  return dias >= 0 && dias <= 7;\n});\n\nreturn [{\n  json: {\n    periodo: new Date().toISOString().split('T')[0],\n    resumo: {\n      total_despesas: items.length,\n      valor_total: items.reduce((sum, i) => sum + (i.json.valor || 0), 0),\n      aprovado: totalAprovado,\n      pendente: totalPendente,\n      rejeitado: totalRejeitado\n    },\n    por_categoria: porCategoria,\n    por_centro_custo: porCentroCusto,\n    vencimentos_proximos: {\n      quantidade: vencimentosProximos.length,\n      valor_total: vencimentosProximos.reduce((sum, i) => sum + (i.json.valor || 0), 0),\n      itens: vencimentosProximos.map(i => ({\n        fornecedor: i.json.fornecedor,\n        valor: i.json.valor,\n        vencimento: i.json.vencimento,\n        dias_restantes: i.json.dias_ate_vencimento\n      }))\n    }\n  }\n}];"
+      },
+      "id": "e66b1f7a-bb71-41ff-ae0b-8f927d4868f6",
+      "name": "Analisar Dados Financeiros",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        688,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "financeiro/documentos",
+        "options": {}
+      },
+      "id": "75c079c0-2d14-46bd-bd2e-db2ad136719e",
+      "name": "Webhook - Recebimento de Documentos",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        240,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "pdf",
+        "options": {
+          "joinPages": true
+        }
+      },
+      "id": "963eeab5-bc3a-488b-88b7-9460c632c6c9",
+      "name": "Extrair Texto do Documento",
+      "type": "n8n-nodes-base.extractFromFile",
+      "typeVersion": 1.1,
+      "position": [
+        464,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.data }}",
+        "hasOutputParser": true,
+        "options": {
+          "systemMessage": "Você é um assistente financeiro especializado em extrair informações de documentos fiscais. Extraia: fornecedor, valor, vencimento, categoria (Serviços, Produtos, Despesas Operacionais, etc.), centro de custo, número do documento e descrição. Se alguma informação não estiver disponível, use \"Não informado\"."
+        }
+      },
+      "id": "03e7675c-dda3-4a23-8f5a-b42433b5cf02",
+      "name": "Agente - Extrair Informações Financeiras",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        688,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "41215853-4374-4b28-8bae-c3f701bdab4e",
+      "name": "Modelo OpenAI",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        704,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "jsonSchemaExample": {
+          "fornecedor": "Nome do Fornecedor",
+          "valor": 1500,
+          "vencimento": "2024-03-15",
+          "categoria": "Serviços",
+          "centro_custo": "Administrativo",
+          "numero_documento": "NF-12345",
+          "descricao": "Descrição do serviço ou produto"
+        }
+      },
+      "id": "fd3f1eb3-7536-47d8-b147-4f4bfdafac85",
+      "name": "Parser Estruturado",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        832,
+        864
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "fornecedor",
+              "value": "={{ $json.output.fornecedor }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "valor",
+              "value": "={{ $json.output.valor }}",
+              "type": "number"
+            },
+            {
+              "id": "3",
+              "name": "vencimento",
+              "value": "={{ $json.output.vencimento }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "categoria",
+              "value": "={{ $json.output.categoria }}",
+              "type": "string"
+            },
+            {
+              "id": "5",
+              "name": "centro_custo",
+              "value": "={{ $json.output.centro_custo }}",
+              "type": "string"
+            },
+            {
+              "id": "6",
+              "name": "numero_documento",
+              "value": "={{ $json.output.numero_documento }}",
+              "type": "string"
+            },
+            {
+              "id": "7",
+              "name": "descricao",
+              "value": "={{ $json.output.descricao }}",
+              "type": "string"
+            },
+            {
+              "id": "8",
+              "name": "status",
+              "value": "pendente_aprovacao",
+              "type": "string"
+            },
+            {
+              "id": "9",
+              "name": "data_registro",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "10",
+              "name": "dias_ate_vencimento",
+              "value": "={{ Math.ceil(($json.output.vencimento ? new Date($json.output.vencimento) - new Date() : 0) / (1000 * 60 * 60 * 24)) }}",
+              "type": "number"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "db93d2ed-9b60-4d08-b2e8-e86bbae6a6ed",
+      "name": "Validar e Enriquecer Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1040,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "11e66383-1cdc-41b5-88f3-2317d73b4268",
+      "name": "Salvar no Banco de Dados",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1264,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "combinator": "or",
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "id": "1",
+              "leftValue": "={{ $json.valor }}",
+              "rightValue": 5000,
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              }
+            },
+            {
+              "id": "2",
+              "leftValue": "={{ $json.dias_ate_vencimento }}",
+              "rightValue": 3,
+              "operator": {
+                "type": "number",
+                "operation": "lt"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "a3f63730-e53e-421e-8a39-5d51256c8e43",
+      "name": "Verificar Valor para Aprovação",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1488,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "=Aprovação de Despesa - {{ $json.fornecedor }}",
+        "formDescription": "=Fornecedor: {{ $json.fornecedor }}<br>Valor: R$ {{ $json.valor }}<br>Vencimento: {{ $json.vencimento }}<br>Categoria: {{ $json.categoria }}<br>Centro de Custo: {{ $json.centro_custo }}<br>Descrição: {{ $json.descricao }}<br><br>Por favor, revise e aprove ou rejeite esta despesa.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Decisão",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Aprovar"
+                  },
+                  {
+                    "option": "Rejeitar"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Observações",
+              "fieldType": "textarea",
+              "placeholder": "Adicione observações sobre sua decisão (opcional)"
+            }
+          ]
+        },
+        "limitWaitTime": true,
+        "resumeAmount": 72,
+        "options": {}
+      },
+      "id": "862c3a1c-db77-4b19-b413-8d301b54279a",
+      "name": "Aguardar Aprovação Humana",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1712,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "={{ $json.decisao === \"Aprovar\" ? \"aprovado\" : \"rejeitado\" }}",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "aprovador",
+              "value": "={{ $execution.user }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "data_aprovacao",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "4",
+              "name": "observacoes_aprovacao",
+              "value": "={{ $json.observacoes }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "71956383-7db2-4c9a-a1ac-544067e47987",
+      "name": "Processar Decisão de Aprovação",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1936,
+        544
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "enterprise_safe_status",
+              "name": "enterprise_safe_status",
+              "value": "datatable_substituido_por_portal_source_of_truth",
+              "type": "string"
+            },
+            {
+              "id": "enterprise_note",
+              "name": "enterprise_note",
+              "value": "Persistencia local n8n substituida por estado seguro. Portal Vesper permanece fonte da verdade.",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "68c72c4e-46dd-44fb-8214-cd1d93c6b08f",
+      "name": "Atualizar Status no Banco",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        2160,
+        640
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "1",
+              "name": "status",
+              "value": "aprovado_automatico",
+              "type": "string"
+            },
+            {
+              "id": "2",
+              "name": "data_aprovacao",
+              "value": "={{ $now.toISO() }}",
+              "type": "string"
+            },
+            {
+              "id": "3",
+              "name": "observacoes_aprovacao",
+              "value": "Aprovado automaticamente - valor abaixo do limite",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "222b9ff6-159f-4131-b5e8-30e827e70a18",
+      "name": "Aprovar Automaticamente",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.4,
+      "position": [
+        1936,
+        736
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "fe095879-4751-4deb-ac16-4422c586e09d",
+      "name": "Execute Workflow Trigger",
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1,
+      "position": [
+        0,
+        -100
+      ]
+    }
+  ],
+  "connections": {
+    "Início Manual": {
+      "main": [
+        [
+          {
+            "node": "Buscar Despesas para Relatório",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar Despesas para Relatório": {
+      "main": [
+        [
+          {
+            "node": "Analisar Dados Financeiros",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Analisar Dados Financeiros": {
+      "main": [
+        []
+      ]
+    },
+    "Webhook - Recebimento de Documentos": {
+      "main": [
+        [
+          {
+            "node": "Extrair Texto do Documento",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Extrair Texto do Documento": {
+      "main": [
+        [
+          {
+            "node": "Agente - Extrair Informações Financeiras",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agente - Extrair Informações Financeiras": {
+      "main": [
+        [
+          {
+            "node": "Validar e Enriquecer Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Modelo OpenAI": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agente - Extrair Informações Financeiras",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parser Estruturado": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Agente - Extrair Informações Financeiras",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validar e Enriquecer Dados": {
+      "main": [
+        [
+          {
+            "node": "Salvar no Banco de Dados",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Salvar no Banco de Dados": {
+      "main": [
+        [
+          {
+            "node": "Verificar Valor para Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verificar Valor para Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Aguardar Aprovação Humana",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Aprovar Automaticamente",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Aguardar Aprovação Humana": {
+      "main": [
+        [
+          {
+            "node": "Processar Decisão de Aprovação",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Processar Decisão de Aprovação": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Status no Banco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Atualizar Status no Banco": {
+      "main": [
+        []
+      ]
+    },
+    "Aprovar Automaticamente": {
+      "main": [
+        [
+          {
+            "node": "Atualizar Status no Banco",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Execute Workflow Trigger": {
+      "main": [
+        [
+          {
+            "node": "Buscar Despesas para Relatório",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "errorWorkflow": "WORKFLOW_ERROR_AUDIT"
+  },
+  "activeVersionId": "9fd6d929-afd3-472a-bd9b-ede0536c2a6f",
+  "tags": []
+}
