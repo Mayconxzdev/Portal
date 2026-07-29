@@ -39,7 +39,7 @@ Mapeamento de colunas extraídas para suas futuras localizações no banco Postg
 * **Total de registros de Itens**: 5
 * **Itens com SKU/Código preenchido**: 5
 * **Itens sem SKU/Código**: 0 (Exigem geração automática de SKU)
-* **Categorias Detectadas**: Cantoneira Inox, Barra Chata Inox, Chapas, Chapa e Tubo Inox
+* **Categorias Detectadas**: Chapa e Tubo Inox, Barra Chata Inox, Chapas, Cantoneira Inox
 
 ## 7. Preços e histórico
 * **Preços de referência mapeados**: 5 registros

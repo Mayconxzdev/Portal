@@ -7,11 +7,11 @@
       "name": "Fornecedor Alfa Ltda",
       "cnpj_cpf_raw": "11111111000111",
       "cnpj_cpf_normalized": "11111111000111",
-      "cnpj_cpf_masked": "72.***.***/0001-10",
+      "cnpj_cpf_masked": "11.***.***/0001-11",
       "contact": "Contato Alfa",
       "email_raw": "vendas@fornecedor-alfa.example",
       "email_normalized": "vendas@fornecedor-alfa.example",
-      "email_masked": "v****vendas@fornecedor-hardware.example",
+      "email_masked": "v****s@fornecedor-alfa.example",
       "phone_masked": "(08) ****-3355",
       "city": "Eldorado do Sul",
       "uf": "RS"
@@ -20,11 +20,11 @@
       "name": "Fornecedor Beta Ltda",
       "cnpj_cpf_raw": "22222222000122",
       "cnpj_cpf_normalized": "22222222000122",
-      "cnpj_cpf_masked": "07.***.***/0001-09",
+      "cnpj_cpf_masked": "22.***.***/0001-22",
       "contact": "Contato Beta",
       "email_raw": "contato@fornecedor-beta.example",
       "email_normalized": "contato@fornecedor-beta.example",
-      "email_masked": "c*********orcamentos@fornecedor-hardware.example",
+      "email_masked": "c*****o@fornecedor-beta.example",
       "phone_masked": "(11) ****-8000",
       "city": "São Paulo",
       "uf": "SP"
@@ -33,11 +33,11 @@
       "name": "Fornecedor Gama Ltda",
       "cnpj_cpf_raw": "33333333000133",
       "cnpj_cpf_normalized": "33333333000133",
-      "cnpj_cpf_masked": "12.***.***/0001-99",
+      "cnpj_cpf_masked": "33.***.***/0001-33",
       "contact": "Contato Gama",
       "email_raw": "contato@fornecedor-gama.example",
       "email_normalized": "contato@fornecedor-gama.example",
-      "email_masked": "c****vendas@fornecedor-gama.example",
+      "email_masked": "c*****o@fornecedor-gama.example",
       "phone_masked": "(11) ****-8888",
       "city": "Campinas",
       "uf": "SP"
@@ -46,11 +46,11 @@
       "name": "Fornecedor Delta Ltda",
       "cnpj_cpf_raw": "44444444000144",
       "cnpj_cpf_normalized": "44444444000144",
-      "cnpj_cpf_masked": "98.***.***/0001-88",
+      "cnpj_cpf_masked": "44.***.***/0001-44",
       "contact": "Bianca Metal",
       "email_raw": "contato@fornecedor-delta.example",
       "email_normalized": "contato@fornecedor-delta.example",
-      "email_masked": "c*****orcamentos@fornecedor-delta.example",
+      "email_masked": "c*****o@fornecedor-delta.example",
       "phone_masked": "(11) ****-4444",
       "city": "São Bernardo",
       "uf": "SP"
@@ -59,11 +59,11 @@
       "name": "Fornecedor Delta Filial",
       "cnpj_cpf_raw": "44444444000144",
       "cnpj_cpf_normalized": "44444444000144",
-      "cnpj_cpf_masked": "98.***.***/0001-88",
+      "cnpj_cpf_masked": "44.***.***/0001-44",
       "contact": "João Filial",
       "email_raw": "filial@fornecedor-delta.example",
       "email_normalized": "filial@fornecedor-delta.example",
-      "email_masked": "v****vendas@fornecedor-delta.example",
+      "email_masked": "f****l@fornecedor-delta.example",
       "phone_masked": "(11) ****-4445",
       "city": "São Bernardo",
       "uf": "SP"
@@ -169,13 +169,13 @@
       "items": [
         {
           "name": "Fornecedor Delta Ltda",
-          "cnpj_cpf_masked": "98.***.***/0001-88",
-          "email_masked": "c*****orcamentos@fornecedor-delta.example"
+          "cnpj_cpf_masked": "44.***.***/0001-44",
+          "email_masked": "c*****o@fornecedor-delta.example"
         },
         {
           "name": "Fornecedor Delta Filial",
-          "cnpj_cpf_masked": "98.***.***/0001-88",
-          "email_masked": "v****vendas@fornecedor-delta.example"
+          "cnpj_cpf_masked": "44.***.***/0001-44",
+          "email_masked": "f****l@fornecedor-delta.example"
         }
       ]
     }
