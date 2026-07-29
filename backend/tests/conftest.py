@@ -33,6 +33,35 @@ engine = create_engine(
 )
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
+
+class _NoopRedisForTests:
+    """Avoid external Redis I/O when a test did not explicitly provide a double.
+
+    Event publishing is best-effort in the application. Letting the default client
+    attempt a TCP connection during tests turns every emitted event into a one-second
+    network wait when Redis is not running locally, and makes CI depend on external
+    infrastructure. Tests that need Redis failures or call assertions patch
+    ``app.core.events.redis.Redis`` with their own mock.
+    """
+
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def ping(self):
+        return True
+
+    def publish(self, *args, **kwargs):
+        return 1
+
+
+@pytest.fixture(autouse=True)
+def prevent_external_redis_connections(monkeypatch):
+    """Keep the test suite hermetic unless a test opts into a Redis mock."""
+    import app.core.events as events_module
+
+    if events_module.redis is not None:
+        monkeypatch.setattr(events_module.redis, "Redis", _NoopRedisForTests)
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_database():
     # Cria todas as tabelas na inicialização da suite de testes

@@ -88,7 +88,7 @@ def test_parse_sheet_informacao():
     assert len(results) == 1
     row = results[0]
     assert row["entity_target"] == "IT_ASSET"
-    assert row["source_row_id"] == "diogo_pc_01"
+    assert row["source_row_id"] == "demo_asset_01"
     assert row["raw_data_json"]["user"] == "Operador Demo"
     assert row["raw_data_json"]["anydesk_password"] == "senha-anydesk"
     assert row["normalized_data_json"]["anydesk_password"] == "******"
@@ -206,7 +206,7 @@ def test_parse_sheet_ramais():
     assert len(results) == 2
     r0 = results[0]
     assert r0["entity_target"] == "IT_EXTENSION"
-    assert r0["source_row_id"] == "ext_201_diogo"
+    assert r0["source_row_id"] == "ext_201_operador_demo"
     assert r0["normalized_data_json"]["name"] == "Operador Demo"
     assert r0["normalized_data_json"]["extension"] == "201"
     assert r0["normalized_data_json"]["sector"] == "DIRETORIA"
@@ -234,7 +234,7 @@ def test_parse_sheet_anydesk():
     assert len(results) == 2
     r0 = results[0]
     assert r0["entity_target"] == "IT_REMOTE_ACCESS"
-    assert r0["source_row_id"] == "anydesk_diogo"
+    assert r0["source_row_id"] == "anydesk_operador_demo"
     assert r0["normalized_data_json"]["user_name"] == "Operador Demo"
     assert r0["normalized_data_json"]["anydesk_id"] == "1991498866"
     assert r0["normalized_data_json"]["password"] == "******"
@@ -356,7 +356,7 @@ def test_parse_sheet_emails():
     assert len(results) == 1
     r0 = results[0]
     assert r0["entity_target"] == "EMAIL_ACCOUNT_ACCESS"
-    assert r0["source_row_id"] == "email_diretoria_vesper_com_br"
+    assert r0["source_row_id"] == "email_diretoria_portal_example"
     assert r0["normalized_data_json"]["email"] == "diretoria@portal.example"
     assert r0["normalized_data_json"]["password"] == "******"
     assert r0["normalized_data_json"]["assigned_users"] == ["Operador Demo", "Financeiro"]
@@ -379,7 +379,7 @@ def test_parse_sheet_impacta():
     assert len(results) == 1
     r0 = results[0]
     assert r0["entity_target"] == "VOIP_ACCOUNT"
-    assert r0["source_row_id"] == "voip_201_diogo"
+    assert r0["source_row_id"] == "voip_201_operador_demo"
     assert r0["normalized_data_json"]["user_name"] == "Operador Demo"
     assert r0["normalized_data_json"]["extension"] == "201"
     assert r0["normalized_data_json"]["password"] == "******"

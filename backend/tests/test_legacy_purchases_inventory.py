@@ -26,7 +26,7 @@ def test_normalize_cnpj_cpf():
     assert lpi.normalize_cnpj_cpf(123456789) == "00123456789" # Preenche se numérico curto
 
 def test_normalize_email():
-    assert lpi.normalize_email(" COMERCIAL@DELL.COM.BR  ") == "comercial@fornecedor-hardware.example"
+    assert lpi.normalize_email(" COMERCIAL@DELL.COM.BR  ") == "comercial@dell.com.br"
     assert lpi.normalize_email("invalido.com") == ""
     assert lpi.normalize_email(None) == ""
 
