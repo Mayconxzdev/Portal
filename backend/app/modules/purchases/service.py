@@ -60,6 +60,7 @@ from app.modules.approvals.service import ApprovalService
 from app.core.ws import manager
 from app.core.events import emit_event
 from app.models.master_data import Person, ProductFamily, ProductItem, Service
+from app.models.it import ITAsset
 from app.models.stock import StockCatalogItem, StockCatalogOffer, StockCatalogSupplier
 from app.modules.stock.service import StockCatalogService
 from app.modules.purchases.xlsx_reconciliation import PurchasesXlsxReconciliation, PurchasesXlsxSmartCatalog
