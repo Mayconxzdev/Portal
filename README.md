@@ -72,7 +72,7 @@ Os números acima descrevem o **inventário do código**, não um resultado de t
 
 ### Atuação apresentada neste case
 
-O repositório reúne concepção de produto, arquitetura, implementação full-stack, integrações, automações, testes, documentação e preparação de entrega. Ferramentas de IA foram usadas como apoio de pesquisa, revisão e automação; as regras de negócio, riscos, limitações e critérios de validação permanecem explícitos e verificáveis no código.
+O repositório reúne concepção de produto, arquitetura de soluções, automações, integrações, backend, frontend operacional, testes, documentação e preparação de entrega. Ferramentas de IA foram utilizadas como apoio de pesquisa, implementação, revisão e validação; as regras de negócio, riscos, limitações e critérios de qualidade permanecem explícitos e verificáveis no código.
 
 ---
 
