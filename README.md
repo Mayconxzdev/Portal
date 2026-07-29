@@ -40,6 +40,14 @@ O objetivo não é apenas colocar vários módulos no mesmo menu. A proposta é 
 
 > **Escopo do repositório:** implementação de portfólio e referência técnica. Alguns módulos estão operacionais, outros possuem maturidade parcial ou fluxo demonstrativo. O estado de cada área está documentado sem promessas de produção em [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
 
+### Origem e estado real deste case
+
+Este repositório público foi montado especificamente como uma **referência arquitetural sanitizada** do estado atual do Portal Vesper e dos sistemas internos que estão sendo consolidados nele.
+
+O desenvolvimento original ocorreu em ambiente privado. Por esse motivo, o histórico público começa em uma publicação concentrada e não representa o histórico completo de construção, testes, decisões e evolução do produto.
+
+Todos os módulos presentes no código correspondem a áreas já utilizadas internamente, porém com níveis diferentes de maturidade. “Presente no código” não significa que toda funcionalidade esteja igualmente homologada para produção. O estado de cada área deve ser analisado junto com [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md).
+
 ## Resumo para avaliação técnica
 
 | Item | Evidência no repositório |
