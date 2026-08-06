@@ -1,8 +1,8 @@
 <div align="center">
 
-# Portal Vesper
+# Portal — public reference for an earlier architecture
 
-### A modular corporate operations, governance and automation platform
+### Modular platform for operations, approvals, integrations and automation
 
 [![Portal CI](https://github.com/Mayconxzdev/Portal/actions/workflows/ci.yml/badge.svg)](https://github.com/Mayconxzdev/Portal/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/Mayconxzdev/Portal/actions/workflows/codeql.yml/badge.svg)](https://github.com/Mayconxzdev/Portal/actions/workflows/codeql.yml)
@@ -10,184 +10,111 @@
 ![TypeScript](https://img.shields.io/badge/TypeScript-6-3178C6?logo=typescript&logoColor=white)
 ![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Source%20of%20Truth-4169E1?logo=postgresql&logoColor=white)
-![License](https://img.shields.io/badge/License-MIT-22c55e)
 
-[Product case study](docs/PORTFOLIO_CASE_STUDY.md) ·
-[Architecture](docs/ARCHITECTURE.md) ·
-[Module status](docs/PROJECT_STATUS.md) ·
-[Português](README.md)
+[Architecture](docs/ARCHITECTURE.md) · [Module status](docs/PROJECT_STATUS.md) · [Security](docs/SECURITY.md) · [Português](README.md)
 
 </div>
 
----
+## About this repository
 
-## Overview
+This repository preserves a **sanitized public reference of an earlier Portal version**. I built it to bring together processes that were spread across spreadsheets, email, internal systems and isolated automations.
 
-**Portal Vesper** is an internal operations platform designed to replace fragmented spreadsheets, e-mail threads, legacy tools and disconnected workflows with a single modular system.
+The current product continues in a private repository with a multi-tenant direction and major foundation changes. It is still under development and is being technically revalidated before an internal pilot. This public code should therefore be read as architecture history and a record of decisions I explored, not as the complete current product.
 
-The project covers purchasing, inventory, approvals, production, IT operations, internal communication and automation. Its core goal is not to place unrelated screens under one menu, but to create **connected business journeys** with explicit domain ownership, audited actions and reliable event contracts.
+## The problem I worked on
 
-### What this project demonstrates
+A single business operation often crosses several places:
 
-- product modelling for a broad enterprise domain;
-- React and TypeScript UI built on reusable components and design tokens;
-- FastAPI services with authentication, RBAC, auditing and migrations;
-- PostgreSQL as the primary source of truth;
+- a request starts in a conversation or email;
+- data lives in separate spreadsheets and systems;
+- approval happens outside the workflow;
+- execution is tracked somewhere else;
+- history becomes fragmented;
+- automations begin to hold rules that should belong to the main product.
+
+I designed Portal around connected journeys, domain ownership, governed actions and contract-based integrations.
+
+## What I built in this reference
+
+- React and TypeScript interface with reusable components and design tokens;
+- FastAPI backend with domain-specific models, services, schemas and routes;
+- PostgreSQL and Alembic migrations;
+- authentication, RBAC, auditing and server-side validation;
 - WebSocket-based real-time communication;
-- internal events, transactional outbox and asynchronous reactions;
-- n8n as an execution layer rather than a parallel database;
-- automated tests, linting, builds, CI and security analysis.
+- internal events and transactional outbox;
+- n8n integrations through APIs and signed callbacks, without using workflows as the primary data source;
+- modules for procurement, inventory, approvals, production, IT, communication and automation;
+- automated tests, linting, builds, CI and CodeQL.
 
-> **Repository scope:** portfolio and technical reference implementation. Some modules are operational, while others are partial or demonstrative. [`docs/PROJECT_STATUS.md`](docs/PROJECT_STATUS.md) documents the maturity and limitations of every area.
+## Public-version interface
 
-## Technical review summary
+The screens use synthetic data and show the visual direction of the earlier architecture.
 
-| Area | Repository evidence |
+| Dashboard | Production |
 |---|---|
-| Product | Connected purchasing, inventory, approvals, production, IT and communication journeys |
-| Architecture | Modular monolith, domain contracts, Action Intents and transactional outbox |
-| Backend | 19 FastAPI/SQLAlchemy domains and 51 Alembic migrations |
-| Frontend | React/TypeScript, design tokens, accessibility and task-oriented interfaces |
-| Quality | 46 automated-test source files, strict linting, builds, CI and CodeQL |
-| Automation | 22 public n8n templates, disabled and stripped of credentials |
-| Security | RBAC, auditing, server-side validation, signed callbacks and encrypted vault secrets |
+| ![Portal dashboard](docs/portfolio/01-dashboard.webp) | ![Production Kanban](docs/portfolio/02-kanban.webp) |
 
-These figures describe the **source inventory**, not a test result. Execution status should be confirmed through the CI workflow of the published revision.
+| Procurement | Inventory |
+|---|---|
+| ![Procurement workspace](docs/portfolio/03-purchases.webp) | ![Inventory and catalog](docs/portfolio/04-stock.webp) |
 
-### Five-minute review path
+| IT and HelpDesk | Approvals |
+|---|---|
+| ![IT module](docs/portfolio/05-it-helpdesk.webp) | ![Approval center](docs/portfolio/06-approvals.webp) |
 
-1. Review the [interface and workflows](#product-interface).
-2. Read the [product case study](docs/PORTFOLIO_CASE_STUDY.md).
-3. Inspect the [architecture decisions](docs/ARCHITECTURE_DECISIONS.md).
-4. Check [module maturity and limitations](docs/PROJECT_STATUS.md).
-5. Explore the entry points: [`backend/app/main.py`](backend/app/main.py), [`backend/app/modules/`](backend/app/modules/) and [`apps/web/src/`](apps/web/src/).
-
-### Scope of work represented by the case
-
-The repository brings together product definition, architecture, full-stack implementation, integrations, automation, tests, documentation and delivery preparation. AI tools supported research, review and automation; business rules, risks, limitations and validation criteria remain explicit and inspectable in the source.
-
----
-
-## Product interface
-
-The following screens use **synthetic demonstration data**. They illustrate the product direction and representative workflows without exposing real operational information.
-
-### Action-oriented dashboard
-
-![Portal corporate dashboard](docs/portfolio/01-dashboard.webp)
-
-<table>
-<tr>
-<td width="50%">
-
-### Operational Kanban
-
-![Production Kanban](docs/portfolio/02-kanban.webp)
-
-</td>
-<td width="50%">
-
-### Purchasing and quotations
-
-![Purchasing workspace](docs/portfolio/03-purchases.webp)
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Inventory and catalogue
-
-![Inventory catalogue](docs/portfolio/04-stock.webp)
-
-</td>
-<td width="50%">
-
-### IT, Help Desk and assets
-
-![IT operations module](docs/portfolio/05-it-helpdesk.webp)
-
-</td>
-</tr>
-<tr>
-<td width="50%">
-
-### Approvals and governance
-
-![Approval centre](docs/portfolio/06-approvals.webp)
-
-</td>
-<td width="50%">
-
-### Chat and operational assistant
-
-![Chat and Koda](docs/portfolio/07-chat-koda.webp)
-
-</td>
-</tr>
-</table>
-
----
-
-## Product problem
-
-A single corporate operation often spans several channels: a request starts in e-mail, product data lives in a spreadsheet, approval happens in chat, execution is tracked on another board, and automation rules are hidden in external tools.
-
-Portal Vesper addresses that fragmentation through three principles:
-
-1. **Domain ownership:** each module owns only its rules and entities.
-2. **Governed actions:** sensitive operations require permission checks, previews, confirmation or formal approval.
-3. **Contract-based integration:** events, APIs and Action Intents connect modules without allowing external tools to bypass the application.
-
----
+| Chat and assistant |
+|---|
+| ![Chat and Koda](docs/portfolio/07-chat-koda.webp) |
 
 ## Architecture
 
-Portal Vesper is a **modular monolith**. It is deployed as one backend application, while business domains remain separated through their own routes, models, schemas and services.
+This version uses a **modular monolith**: one backend application with domains separated through their own modules, models, services, schemas and routes.
 
 ```mermaid
 flowchart LR
     U[User] --> WEB[React + TypeScript]
     WEB <-->|REST and WebSockets| API[FastAPI]
-
     API --> AUTH[Authentication + RBAC]
     API --> DOM[Domain services]
-    API --> INTENT[Action Intents]
+    API --> ACTION[Governed actions]
     DOM --> OUTBOX[Events / Outbox]
-
     AUTH --> PG[(PostgreSQL)]
     DOM --> PG
-    INTENT --> PG
+    ACTION --> PG
     OUTBOX --> PG
     OUTBOX --> REDIS[(Redis)]
     API --> OBJ[(MinIO)]
-
     N8N[n8n] <-->|Authenticated APIs| API
-    WORKER[Background workers] --> REDIS
+    WORKER[Workers] --> REDIS
     WORKER --> PG
 ```
 
-Key decisions include a PostgreSQL source of truth, API-only n8n integrations, authenticated encryption for vault secrets, and an Action Intent layer that separates interpretation from sensitive execution.
+### Main decisions
 
----
+| Decision | Reason |
+|---|---|
+| Modular monolith | Preserve domain boundaries without taking on microservice complexity too early. |
+| PostgreSQL as the primary source | Avoid conflicting state across modules, spreadsheets and automations. |
+| Governed actions | Separate intent, validation, confirmation and sensitive execution. |
+| Transactional outbox | Store state and its event in the same transaction. |
+| n8n through APIs | Keep rules and permissions in the product while using automations as executors. |
+| Encrypted vault | Protect secrets at rest and audit relevant access. |
 
-## Technology
+## Stack
 
-| Layer | Technology |
+| Layer | Technologies |
 |---|---|
 | Frontend | React 19, TypeScript, Vite, CSS, Lucide, dnd-kit |
 | Backend | Python, FastAPI, Pydantic, SQLAlchemy 2.0 |
-| Database | PostgreSQL, Alembic |
+| Database and migrations | PostgreSQL, Alembic |
 | Events and jobs | Redis, Dramatiq, WebSockets |
-| Object storage | MinIO / S3-compatible storage |
-| Automation | n8n, signed webhooks and callbacks |
+| Files | MinIO / S3-compatible storage |
+| Automation | n8n, webhooks and signed callbacks |
 | Desktop | Tauri 2 |
 | Quality | Pytest, Vitest, Testing Library, ESLint, Ruff, CodeQL |
 | Local infrastructure | Docker Compose, Adminer, SearXNG |
 
----
-
-## Running locally
+## Run locally
 
 ### Requirements
 
@@ -210,55 +137,28 @@ cp .env.example .env
 ./scripts/dev.sh
 ```
 
-After the development seed:
+After the local seed:
 
 - Portal: `http://localhost:5173`
-- API docs: `http://localhost:8000/docs`
-- local user: `vesper_admin`
-- local password: `portal-dev-only`
+- API: `http://localhost:8000/docs`
+- development user: `vesper_admin`
+- development password: `portal-dev-only`
 
-These credentials are for local development only. Replace every `local-dev-*` value before using a shared environment.
+These credentials exist only for the local demonstration environment and must be changed before any shared use.
 
----
+## Current limits
 
-## Validation
-
-```bash
-# Backend
-cd backend
-pip install -r requirements-dev.txt
-ruff check app tests
-python -m compileall -q app alembic
-ENVIRONMENT=testing PYTHONPATH=. pytest -q
-
-# Frontend
-cd ../apps/web
-npm ci
-npm run lint
-npm run test:run
-npm run build
-```
-
-GitHub Actions runs the same lint, test and build stages on pull requests. CodeQL analyses Python and JavaScript/TypeScript.
-
----
-
-## Known limitations
-
-- there is no public hosted demo in this repository;
-- external integrations require environment-specific credentials and infrastructure;
-- real e-mail delivery and commercial connectors require a controlled staging environment;
-- Proposals, BI, Monitoring and Knowledge are less mature than the core modules;
-- n8n workflows are published as disabled, credential-free templates;
-- this distribution contains no corporate uploads, databases or legacy files.
+- this repository is not the complete current private foundation;
+- its screens and modules belong to an earlier public reference;
+- some flows in this version are more mature than others;
+- presence in the source does not mean production deployment or approval;
+- the current product remains under development and revalidation before a pilot;
+- company data, credentials, files and infrastructure are not part of this publication.
 
 ## Author
 
-**Maycon da Silva Ferreira**
-
-- GitHub: [@Mayconxzdev](https://github.com/Mayconxzdev)
-- E-mail: [mayconxz00dev@gmail.com](mailto:mayconxz00dev@gmail.com)
+**Maycon Ferreira** — product, architecture, backend, frontend, integrations, automation, tests and documentation.
 
 ## License
 
-The source code is available under the [MIT License](LICENSE). Third-party integrations and trademarks remain subject to their own terms.
+Distributed under the [MIT license](LICENSE).
