@@ -19,7 +19,7 @@
 
 Este repositório preserva uma **referência pública e sanitizada de uma versão anterior do Portal**. Eu o desenvolvi para centralizar processos que normalmente ficam distribuídos entre planilhas, e-mails, sistemas internos e automações isoladas.
 
-A versão atual do produto segue em um repositório privado, com direção multiempresa e mudanças importantes na fundação. Ela ainda está em desenvolvimento e passa por revalidação técnica antes de um piloto interno. Por isso, o código desta publicação deve ser entendido como histórico arquitetural e demonstração das decisões que já explorei, e não como o estado atual completo do produto.
+A versão atual do produto segue em um repositório privado, com direção multiempresa e mudanças importantes na fundação. Ela ainda está em desenvolvimento e passa por revalidação técnica antes de um piloto interno. Por isso, o código desta publicação representa o histórico arquitetural e as decisões que já explorei, não o estado atual completo do produto.
 
 ## Problema que trabalhei
 
@@ -141,10 +141,9 @@ Depois do seed local:
 
 - Portal: `http://localhost:5173`
 - API: `http://localhost:8000/docs`
-- usuário de desenvolvimento: `vesper_admin`
-- senha de desenvolvimento: `portal-dev-only`
+- as credenciais demonstrativas são definidas no ambiente local e não ficam documentadas no README público.
 
-As credenciais acima existem somente no ambiente local de demonstração e devem ser alteradas antes de qualquer uso compartilhado.
+Use somente dados fictícios e altere qualquer credencial padrão antes de compartilhar o ambiente com outra pessoa.
 
 ## Estado e limites
 
