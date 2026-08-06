@@ -19,7 +19,7 @@
 
 This repository preserves a **sanitized public reference of an earlier Portal version**. I built it to bring together processes that were spread across spreadsheets, email, internal systems and isolated automations.
 
-The current product continues in a private repository with a multi-tenant direction and major foundation changes. It is still under development and is being technically revalidated before an internal pilot. This public code should therefore be read as architecture history and a record of decisions I explored, not as the complete current product.
+The current product continues in a private repository with a multi-tenant direction and major foundation changes. It is still under development and is being technically revalidated before an internal pilot. This public code represents architecture history and decisions I explored, not the complete current product.
 
 ## The problem I worked on
 
@@ -141,10 +141,9 @@ After the local seed:
 
 - Portal: `http://localhost:5173`
 - API: `http://localhost:8000/docs`
-- development user: `vesper_admin`
-- development password: `portal-dev-only`
+- demonstration credentials are defined in the local environment and are not documented in the public README.
 
-These credentials exist only for the local demonstration environment and must be changed before any shared use.
+Use fictional data only and change any default credential before sharing the environment with another person.
 
 ## Current limits
 
