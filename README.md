@@ -11,7 +11,9 @@
 ![FastAPI](https://img.shields.io/badge/FastAPI-Python-009688?logo=fastapi&logoColor=white)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Source%20of%20Truth-4169E1?logo=postgresql&logoColor=white)
 
-[Arquitetura](docs/ARCHITECTURE.md) · [Estado dos módulos](docs/PROJECT_STATUS.md) · [Segurança](docs/SECURITY.md) · [English](README.en.md)
+[Case no portfólio](https://mayconxzdev.github.io/cases/portal/) · [Arquitetura](docs/ARCHITECTURE.md) · [Estado dos módulos](docs/PROJECT_STATUS.md) · [Segurança](docs/SECURITY.md) · [English](README.en.md)
+
+<img src="docs/portfolio/01-dashboard.webp" alt="Dashboard da referência pública e sanitizada do Portal" width="100%">
 
 </div>
 
