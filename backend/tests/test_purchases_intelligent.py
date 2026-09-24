@@ -139,7 +139,7 @@ def test_purchase_request_creation_is_idempotent(client: TestClient, db: Session
 
     first = client.post("/api/v1/purchases/needs", json=payload)
     second = client.post("/api/v1/purchases/needs", json=payload)
-    lookup = client.get("/api/v1/purchases/requests/by-idempotency/purchase-idem-1")
+    lookup = client.get("/api/v1/purchases/requests/by-idempotency/teste-idempotencia")
 
     assert first.status_code == 201
     assert second.status_code == 201
@@ -147,7 +147,7 @@ def test_purchase_request_creation_is_idempotent(client: TestClient, db: Session
     assert lookup.status_code == 200
     assert lookup.json()["request"]["id"] == first.json()["id"]
     assert db.query(PurchaseRequestIdempotencyKey).filter(
-        PurchaseRequestIdempotencyKey.idempotency_key == "purchase-idem-1"
+        PurchaseRequestIdempotencyKey.idempotency_key == "teste-idempotencia"
     ).count() == 1
 
 
