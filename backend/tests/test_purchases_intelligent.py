@@ -125,7 +125,7 @@ def test_purchase_analyze_creates_review_draft_without_request(client: TestClien
 def test_purchase_request_creation_is_idempotent(client: TestClient, db: Session):
     login_admin(client)
     payload = {
-        "idempotency_key": "purchase-idem-1",
+        "idempotency_key": "teste-idempotencia",
         "title": "Compra idempotente",
         "items": [
             {
